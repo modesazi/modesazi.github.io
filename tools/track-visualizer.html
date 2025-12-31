@@ -297,7 +297,7 @@
     <div class="container">
         <div class="header">
             <h1>🏃 运动轨迹可视化</h1>
-            <p>上传TCX文件，生成精美的运动轨迹图</p>
+            <p>上传TCX/GPX文件，生成精美的运动轨迹图</p>
         </div>
 
         <div class="content">
@@ -308,9 +308,9 @@
                         <div class="upload-icon">📤</div>
                         <p><strong>拖拽文件至此</strong></p>
                         <p style="margin-top: 10px; color: #666;">或点击选择文件</p>
-                        <p style="margin-top: 5px; font-size: 0.85em; color: #999;">支持批量上传TCX文件</p>
+                        <p style="margin-top: 5px; font-size: 0.85em; color: #999;">支持批量上传TCX/GPX文件</p>
                     </div>
-                    <input type="file" id="fileInput" class="file-input" multiple accept=".tcx">
+                    <input type="file" id="fileInput" class="file-input" multiple accept=".tcx,.gpx">
                     
                     <div id="fileListContainer" style="display: none;">
                         <div class="stats">
@@ -401,7 +401,7 @@
             <div class="main">
                 <div class="canvas-container">
                     <canvas id="canvas"></canvas>
-                    <div class="placeholder" id="placeholder">请上传TCX文件后点击生成</div>
+                    <div class="placeholder" id="placeholder">请上传TCX/GPX文件后点击生成</div>
                 </div>
             </div>
         </div>
@@ -478,14 +478,17 @@
         downloadBtn.addEventListener('click', downloadImage);
 
         function handleFiles(files) {
-            const tcxFiles = Array.from(files).filter(f => f.name.toLowerCase().endsWith('.tcx'));
+            const validFiles = Array.from(files).filter(f => {
+                const name = f.name.toLowerCase();
+                return name.endsWith('.tcx') || name.endsWith('.gpx');
+            });
             
-            if (tcxFiles.length === 0) {
-                alert('请选择TCX文件');
+            if (validFiles.length === 0) {
+                alert('请选择TCX或GPX文件');
                 return;
             }
 
-            state.files = [...state.files, ...tcxFiles];
+            state.files = [...state.files, ...validFiles];
             updateFileList();
             generateBtn.disabled = false;
         }
@@ -548,6 +551,47 @@
             });
             
             return { lats, lons, alts, hrs, times };
+        }
+
+        async function parseGPX(file) {
+            const text = await file.text();
+            const parser = new DOMParser();
+            const xml = parser.parseFromString(text, 'text/xml');
+            
+            const trackpoints = xml.querySelectorAll('trkpt');
+            const lats = [];
+            const lons = [];
+            const alts = [];
+            const hrs = [];
+            const times = [];
+            
+            trackpoints.forEach(tp => {
+                const lat = tp.getAttribute('lat');
+                const lon = tp.getAttribute('lon');
+                const ele = tp.querySelector('ele');
+                const hr = tp.querySelector('extensions > gpxtpx\\:TrackPointExtension > gpxtpx\\:hr, extensions > TrackPointExtension > hr');
+                const time = tp.querySelector('time');
+                
+                if (lat && lon) {
+                    lats.push(parseFloat(lat));
+                    lons.push(parseFloat(lon));
+                    alts.push(ele ? parseFloat(ele.textContent) : 0);
+                    hrs.push(hr ? parseFloat(hr.textContent) : 0);
+                    times.push(time ? new Date(time.textContent) : null);
+                }
+            });
+            
+            return { lats, lons, alts, hrs, times };
+        }
+
+        async function parseTrackFile(file) {
+            const fileName = file.name.toLowerCase();
+            if (fileName.endsWith('.gpx')) {
+                return await parseGPX(file);
+            } else if (fileName.endsWith('.tcx')) {
+                return await parseTCX(file);
+            }
+            throw new Error('不支持的文件格式');
         }
 
         function haversine(lat1, lon1, lat2, lon2) {
@@ -676,7 +720,7 @@
                 
                 state.tracks = [];
                 for (let i = 0; i < state.files.length; i++) {
-                    const track = await parseTCX(state.files[i]);
+                    const track = await parseTrackFile(state.files[i]);
                     if (track.lats.length > 0) {
                         track.speeds = calculateSpeeds(track.lats, track.lons, track.times);
                         state.tracks.push(track);
