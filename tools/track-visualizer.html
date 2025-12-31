@@ -1,0 +1,935 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>运动轨迹可视化</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+            overflow: hidden;
+        }
+
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 30px;
+            text-align: center;
+        }
+
+        .header h1 {
+            font-size: 2.5em;
+            margin-bottom: 10px;
+        }
+
+        .header p {
+            opacity: 0.9;
+            font-size: 1.1em;
+        }
+
+        .content {
+            display: grid;
+            grid-template-columns: 350px 1fr;
+            gap: 0;
+        }
+
+        .sidebar {
+            background: #f8f9fa;
+            padding: 30px;
+            border-right: 1px solid #e0e0e0;
+            overflow-y: auto;
+            max-height: calc(100vh - 200px);
+        }
+
+        .main {
+            padding: 30px;
+        }
+
+        .section {
+            background: white;
+            border-radius: 10px;
+            padding: 20px;
+            margin-bottom: 20px;
+            border: 1px solid #e0e0e0;
+        }
+
+        .section h3 {
+            margin-bottom: 15px;
+            color: #333;
+            font-size: 1.2em;
+            border-bottom: 2px solid #667eea;
+            padding-bottom: 8px;
+        }
+
+        .upload-area {
+            border: 3px dashed #667eea;
+            border-radius: 10px;
+            padding: 40px;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.3s;
+            background: white;
+        }
+
+        .upload-area:hover {
+            border-color: #764ba2;
+            background: #f8f9ff;
+        }
+
+        .upload-area.drag-over {
+            border-color: #764ba2;
+            background: #f0f0ff;
+            transform: scale(1.02);
+        }
+
+        .upload-icon {
+            font-size: 3em;
+            margin-bottom: 10px;
+        }
+
+        .file-input {
+            display: none;
+        }
+
+        .form-group {
+            margin-bottom: 15px;
+        }
+
+        .form-group label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: 600;
+            color: #555;
+            font-size: 0.9em;
+        }
+
+        .form-group select,
+        .form-group input {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            font-size: 0.95em;
+            transition: border-color 0.3s;
+        }
+
+        .form-group select:focus,
+        .form-group input:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+
+        .form-row {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+        }
+
+        .file-list {
+            max-height: 200px;
+            overflow-y: auto;
+            margin-top: 10px;
+        }
+
+        .file-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 8px 12px;
+            background: #f0f0f0;
+            border-radius: 5px;
+            margin-bottom: 5px;
+            font-size: 0.9em;
+        }
+
+        .file-item span {
+            flex: 1;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .file-item button {
+            background: #ff4757;
+            color: white;
+            border: none;
+            padding: 4px 8px;
+            border-radius: 3px;
+            cursor: pointer;
+            font-size: 0.85em;
+            margin-left: 10px;
+        }
+
+        .file-item button:hover {
+            background: #ff3838;
+        }
+
+        .btn {
+            width: 100%;
+            padding: 15px;
+            border: none;
+            border-radius: 8px;
+            font-size: 1.1em;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s;
+            margin-top: 10px;
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+
+        .btn-primary:hover:not(:disabled) {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4);
+        }
+
+        .btn-secondary {
+            background: #48c774;
+            color: white;
+        }
+
+        .btn-secondary:hover:not(:disabled) {
+            background: #3aba68;
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(72, 199, 116, 0.4);
+        }
+
+        .btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .canvas-container {
+            background: #f0f0f0;
+            border-radius: 10px;
+            padding: 20px;
+            text-align: center;
+            min-height: 400px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        #canvas {
+            max-width: 100%;
+            max-height: 70vh;
+            border-radius: 5px;
+            box-shadow: 0 5px 20px rgba(0,0,0,0.1);
+            display: none;
+        }
+
+        .placeholder {
+            color: #999;
+            font-size: 1.2em;
+        }
+
+        .progress {
+            width: 100%;
+            height: 30px;
+            background: #e0e0e0;
+            border-radius: 15px;
+            overflow: hidden;
+            margin-top: 15px;
+            display: none;
+        }
+
+        .progress-bar {
+            height: 100%;
+            background: linear-gradient(90deg, #667eea 0%, #764ba2 100%);
+            width: 0%;
+            transition: width 0.3s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-size: 0.85em;
+            font-weight: 600;
+        }
+
+        .stats {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 10px;
+            margin-top: 15px;
+        }
+
+        .stat-item {
+            background: #f8f9fa;
+            padding: 10px;
+            border-radius: 5px;
+            text-align: center;
+        }
+
+        .stat-value {
+            font-size: 1.5em;
+            font-weight: 700;
+            color: #667eea;
+        }
+
+        .stat-label {
+            font-size: 0.85em;
+            color: #666;
+            margin-top: 5px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🏃 运动轨迹可视化</h1>
+            <p>上传TCX文件，生成精美的运动轨迹图</p>
+        </div>
+
+        <div class="content">
+            <div class="sidebar">
+                <div class="section">
+                    <h3>📁 文件上传</h3>
+                    <div class="upload-area" id="uploadArea">
+                        <div class="upload-icon">📤</div>
+                        <p><strong>拖拽文件至此</strong></p>
+                        <p style="margin-top: 10px; color: #666;">或点击选择文件</p>
+                        <p style="margin-top: 5px; font-size: 0.85em; color: #999;">支持批量上传TCX文件</p>
+                    </div>
+                    <input type="file" id="fileInput" class="file-input" multiple accept=".tcx">
+                    
+                    <div id="fileListContainer" style="display: none;">
+                        <div class="stats">
+                            <div class="stat-item">
+                                <div class="stat-value" id="fileCount">0</div>
+                                <div class="stat-label">文件数量</div>
+                            </div>
+                        </div>
+                        <div class="file-list" id="fileList"></div>
+                    </div>
+                </div>
+
+                <div class="section">
+                    <h3>🎨 绘制参数</h3>
+                    
+                    <div class="form-group">
+                        <label>绘制模式</label>
+                        <select id="mode">
+                            <option value="grid">网格布局</option>
+                            <option value="overlay">叠加模式</option>
+                        </select>
+                    </div>
+
+                    <div class="form-group">
+                        <label>着色方案</label>
+                        <select id="colorBy">
+                            <option value="elevation">海拔高度</option>
+                            <option value="heartrate">心率</option>
+                            <option value="speed">速度</option>
+                            <option value="single">单色</option>
+                        </select>
+                    </div>
+
+                    <div class="form-group">
+                        <label>画布尺寸</label>
+                        <select id="sizePreset">
+                            <option value="1920x1080">1920×1080 (Full HD)</option>
+                            <option value="3840x2160">3840×2160 (4K)</option>
+                            <option value="4096x4096" selected>4096×4096 (正方形)</option>
+                            <option value="custom">自定义</option>
+                        </select>
+                    </div>
+
+                    <div class="form-row" id="customSize" style="display: none;">
+                        <div class="form-group">
+                            <label>宽度</label>
+                            <input type="number" id="width" value="4096" min="100">
+                        </div>
+                        <div class="form-group">
+                            <label>高度</label>
+                            <input type="number" id="height" value="4096" min="100">
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <label>线条宽度</label>
+                        <input type="number" id="lineWidth" value="1.5" min="0.1" step="0.1">
+                    </div>
+
+                    <div class="form-group" id="alphaGroup">
+                        <label>透明度 (叠加模式)</label>
+                        <input type="number" id="alpha" value="0.3" min="0" max="1" step="0.05">
+                    </div>
+
+                    <div class="form-group">
+                        <label>背景颜色</label>
+                        <select id="bgColor">
+                            <option value="white">白色</option>
+                            <option value="black">黑色</option>
+                            <option value="transparent">透明</option>
+                        </select>
+                    </div>
+
+                    <div class="form-group" id="paddingGroup">
+                        <label>网格间距</label>
+                        <input type="number" id="padding" value="0.05" min="0" max="0.5" step="0.01">
+                    </div>
+
+                    <button class="btn btn-primary" id="generateBtn" disabled>生成轨迹图</button>
+                    <button class="btn btn-secondary" id="downloadBtn" disabled>下载PNG图片</button>
+
+                    <div class="progress" id="progress">
+                        <div class="progress-bar" id="progressBar">0%</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="main">
+                <div class="canvas-container">
+                    <canvas id="canvas"></canvas>
+                    <div class="placeholder" id="placeholder">请上传TCX文件后点击生成</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const state = {
+            files: [],
+            tracks: [],
+            canvas: null,
+            ctx: null
+        };
+
+        const uploadArea = document.getElementById('uploadArea');
+        const fileInput = document.getElementById('fileInput');
+        const fileList = document.getElementById('fileList');
+        const fileListContainer = document.getElementById('fileListContainer');
+        const fileCount = document.getElementById('fileCount');
+        const generateBtn = document.getElementById('generateBtn');
+        const downloadBtn = document.getElementById('downloadBtn');
+        const canvas = document.getElementById('canvas');
+        const placeholder = document.getElementById('placeholder');
+        const progress = document.getElementById('progress');
+        const progressBar = document.getElementById('progressBar');
+        const sizePreset = document.getElementById('sizePreset');
+        const customSize = document.getElementById('customSize');
+        const mode = document.getElementById('mode');
+        const alphaGroup = document.getElementById('alphaGroup');
+        const paddingGroup = document.getElementById('paddingGroup');
+
+        state.canvas = canvas;
+        state.ctx = canvas.getContext('2d');
+
+        uploadArea.addEventListener('click', () => fileInput.click());
+        
+        uploadArea.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            uploadArea.classList.add('drag-over');
+        });
+
+        uploadArea.addEventListener('dragleave', () => {
+            uploadArea.classList.remove('drag-over');
+        });
+
+        uploadArea.addEventListener('drop', (e) => {
+            e.preventDefault();
+            uploadArea.classList.remove('drag-over');
+            handleFiles(e.dataTransfer.files);
+        });
+
+        fileInput.addEventListener('change', (e) => {
+            handleFiles(e.target.files);
+        });
+
+        sizePreset.addEventListener('change', (e) => {
+            if (e.target.value === 'custom') {
+                customSize.style.display = 'grid';
+            } else {
+                customSize.style.display = 'none';
+            }
+        });
+
+        mode.addEventListener('change', (e) => {
+            if (e.target.value === 'overlay') {
+                alphaGroup.style.display = 'block';
+                paddingGroup.style.display = 'none';
+            } else {
+                alphaGroup.style.display = 'none';
+                paddingGroup.style.display = 'block';
+            }
+        });
+
+        generateBtn.addEventListener('click', generateVisualization);
+        downloadBtn.addEventListener('click', downloadImage);
+
+        function handleFiles(files) {
+            const tcxFiles = Array.from(files).filter(f => f.name.toLowerCase().endsWith('.tcx'));
+            
+            if (tcxFiles.length === 0) {
+                alert('请选择TCX文件');
+                return;
+            }
+
+            state.files = [...state.files, ...tcxFiles];
+            updateFileList();
+            generateBtn.disabled = false;
+        }
+
+        function updateFileList() {
+            fileCount.textContent = state.files.length;
+            
+            if (state.files.length > 0) {
+                fileListContainer.style.display = 'block';
+                fileList.innerHTML = '';
+                
+                state.files.forEach((file, index) => {
+                    const item = document.createElement('div');
+                    item.className = 'file-item';
+                    item.innerHTML = `
+                        <span title="${file.name}">${file.name}</span>
+                        <button onclick="removeFile(${index})">删除</button>
+                    `;
+                    fileList.appendChild(item);
+                });
+            } else {
+                fileListContainer.style.display = 'none';
+            }
+        }
+
+        function removeFile(index) {
+            state.files.splice(index, 1);
+            updateFileList();
+            if (state.files.length === 0) {
+                generateBtn.disabled = true;
+            }
+        }
+
+        async function parseTCX(file) {
+            const text = await file.text();
+            const parser = new DOMParser();
+            const xml = parser.parseFromString(text, 'text/xml');
+            
+            const trackpoints = xml.querySelectorAll('Trackpoint');
+            const lats = [];
+            const lons = [];
+            const alts = [];
+            const hrs = [];
+            const times = [];
+            
+            trackpoints.forEach(tp => {
+                const lat = tp.querySelector('LatitudeDegrees');
+                const lon = tp.querySelector('LongitudeDegrees');
+                const alt = tp.querySelector('AltitudeMeters');
+                const hr = tp.querySelector('HeartRateBpm Value');
+                const time = tp.querySelector('Time');
+                
+                if (lat && lon) {
+                    lats.push(parseFloat(lat.textContent));
+                    lons.push(parseFloat(lon.textContent));
+                    alts.push(alt ? parseFloat(alt.textContent) : 0);
+                    hrs.push(hr ? parseFloat(hr.textContent) : 0);
+                    times.push(time ? new Date(time.textContent) : null);
+                }
+            });
+            
+            return { lats, lons, alts, hrs, times };
+        }
+
+        function haversine(lat1, lon1, lat2, lon2) {
+            const R = 6371;
+            const dLat = (lat2 - lat1) * Math.PI / 180;
+            const dLon = (lon2 - lon1) * Math.PI / 180;
+            const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+                      Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+                      Math.sin(dLon / 2) * Math.sin(dLon / 2);
+            const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+            return R * c;
+        }
+
+        function calculateSpeeds(lats, lons, times) {
+            const speeds = [0];
+            for (let i = 1; i < lats.length; i++) {
+                const dist = haversine(lats[i-1], lons[i-1], lats[i], lons[i]);
+                const timeDiff = (times[i] - times[i-1]) / 1000 / 3600;
+                speeds.push(timeDiff > 0 ? dist / timeDiff : 0);
+            }
+            return speeds;
+        }
+
+        function normalizeTrack(lats, lons) {
+            const minLat = Math.min(...lats);
+            const maxLat = Math.max(...lats);
+            const minLon = Math.min(...lons);
+            const maxLon = Math.max(...lons);
+            
+            const latRange = maxLat - minLat;
+            const lonRange = maxLon - minLon;
+            
+            const xs = lons.map(lon => (lon - minLon) / (lonRange || 1));
+            const ys = lats.map(lat => (lat - minLat) / (latRange || 1));
+            
+            const aspectRatio = latRange / (lonRange || 1);
+            
+            return { xs, ys, aspectRatio };
+        }
+
+        function viridis(t) {
+            const colors = [
+                [68, 1, 84], [72, 40, 120], [62, 73, 137], [49, 104, 142],
+                [38, 130, 142], [31, 158, 137], [53, 183, 121], [109, 205, 89],
+                [180, 222, 44], [253, 231, 37]
+            ];
+            const idx = t * (colors.length - 1);
+            const i = Math.floor(idx);
+            const f = idx - i;
+            if (i >= colors.length - 1) return `rgb(${colors[colors.length - 1].join(',')})`;
+            const c1 = colors[i];
+            const c2 = colors[i + 1];
+            const r = Math.round(c1[0] + f * (c2[0] - c1[0]));
+            const g = Math.round(c1[1] + f * (c2[1] - c1[1]));
+            const b = Math.round(c1[2] + f * (c2[2] - c1[2]));
+            return `rgb(${r},${g},${b})`;
+        }
+
+        function rdylbu(t) {
+            t = 1 - t;
+            const colors = [
+                [165, 0, 38], [215, 48, 39], [244, 109, 67], [253, 174, 97],
+                [254, 224, 144], [255, 255, 191], [224, 243, 248], [171, 217, 233],
+                [116, 173, 209], [69, 117, 180], [49, 54, 149]
+            ];
+            const idx = t * (colors.length - 1);
+            const i = Math.floor(idx);
+            const f = idx - i;
+            if (i >= colors.length - 1) return `rgb(${colors[colors.length - 1].join(',')})`;
+            const c1 = colors[i];
+            const c2 = colors[i + 1];
+            const r = Math.round(c1[0] + f * (c2[0] - c1[0]));
+            const g = Math.round(c1[1] + f * (c2[1] - c1[1]));
+            const b = Math.round(c1[2] + f * (c2[2] - c1[2]));
+            return `rgb(${r},${g},${b})`;
+        }
+
+        function plasma(t) {
+            const colors = [
+                [13, 8, 135], [75, 3, 161], [125, 3, 168], [168, 34, 150],
+                [203, 70, 121], [229, 107, 93], [248, 148, 65], [253, 195, 40],
+                [240, 249, 33]
+            ];
+            const idx = t * (colors.length - 1);
+            const i = Math.floor(idx);
+            const f = idx - i;
+            if (i >= colors.length - 1) return `rgb(${colors[colors.length - 1].join(',')})`;
+            const c1 = colors[i];
+            const c2 = colors[i + 1];
+            const r = Math.round(c1[0] + f * (c2[0] - c1[0]));
+            const g = Math.round(c1[1] + f * (c2[1] - c1[1]));
+            const b = Math.round(c1[2] + f * (c2[2] - c1[2]));
+            return `rgb(${r},${g},${b})`;
+        }
+
+        function getColor(value, min, max, colorScheme) {
+            if (max === min) return colorScheme === 'rdylbu' ? rdylbu(0.5) : 
+                                   colorScheme === 'plasma' ? plasma(0.5) : viridis(0.5);
+            const t = Math.max(0, Math.min(1, (value - min) / (max - min)));
+            
+            switch(colorScheme) {
+                case 'rdylbu': return rdylbu(t);
+                case 'plasma': return plasma(t);
+                default: return viridis(t);
+            }
+        }
+
+        function calculateGridLayout(n) {
+            const cols = Math.ceil(Math.sqrt(n));
+            const rows = Math.ceil(n / cols);
+            return { rows, cols };
+        }
+
+        async function generateVisualization() {
+            if (state.files.length === 0) return;
+
+            generateBtn.disabled = true;
+            downloadBtn.disabled = true;
+            progress.style.display = 'block';
+            progressBar.style.width = '0%';
+            progressBar.textContent = '0%';
+
+            try {
+                progressBar.style.width = '10%';
+                progressBar.textContent = '解析文件...';
+                
+                state.tracks = [];
+                for (let i = 0; i < state.files.length; i++) {
+                    const track = await parseTCX(state.files[i]);
+                    if (track.lats.length > 0) {
+                        track.speeds = calculateSpeeds(track.lats, track.lons, track.times);
+                        state.tracks.push(track);
+                    }
+                    const prog = 10 + (i / state.files.length) * 30;
+                    progressBar.style.width = prog + '%';
+                    progressBar.textContent = `解析文件 ${i + 1}/${state.files.length}`;
+                }
+
+                if (state.tracks.length === 0) {
+                    alert('没有找到有效的轨迹数据');
+                    return;
+                }
+
+                progressBar.style.width = '40%';
+                progressBar.textContent = '准备绘制...';
+
+                const preset = sizePreset.value;
+                let width, height;
+                
+                if (preset === 'custom') {
+                    width = parseInt(document.getElementById('width').value);
+                    height = parseInt(document.getElementById('height').value);
+                } else {
+                    [width, height] = preset.split('x').map(Number);
+                }
+
+                canvas.width = width;
+                canvas.height = height;
+
+                const ctx = state.ctx;
+                const bg = document.getElementById('bgColor').value;
+                
+                if (bg === 'transparent') {
+                    ctx.clearRect(0, 0, width, height);
+                } else {
+                    ctx.fillStyle = bg;
+                    ctx.fillRect(0, 0, width, height);
+                }
+
+                const drawMode = mode.value;
+                const colorBy = document.getElementById('colorBy').value;
+                const lineWidth = parseFloat(document.getElementById('lineWidth').value);
+
+                progressBar.style.width = '50%';
+                progressBar.textContent = '绘制轨迹...';
+
+                if (drawMode === 'grid') {
+                    await drawGridMode(ctx, width, height, colorBy, lineWidth);
+                } else {
+                    await drawOverlayMode(ctx, width, height, colorBy, lineWidth);
+                }
+
+                progressBar.style.width = '100%';
+                progressBar.textContent = '完成!';
+
+                canvas.style.display = 'block';
+                placeholder.style.display = 'none';
+                downloadBtn.disabled = false;
+
+                setTimeout(() => {
+                    progress.style.display = 'none';
+                }, 1000);
+
+            } catch (error) {
+                alert('生成失败: ' + error.message);
+                console.error(error);
+            } finally {
+                generateBtn.disabled = false;
+            }
+        }
+
+        async function drawGridMode(ctx, width, height, colorBy, lineWidth) {
+            const n = state.tracks.length;
+            const { rows, cols } = calculateGridLayout(n);
+            const padding = parseFloat(document.getElementById('padding').value);
+            
+            const cellWidth = width / cols;
+            const cellHeight = height / rows;
+            const padX = cellWidth * padding;
+            const padY = cellHeight * padding;
+
+            for (let i = 0; i < state.tracks.length; i++) {
+                const track = state.tracks[i];
+                const { xs, ys, aspectRatio } = normalizeTrack(track.lats, track.lons);
+                
+                const row = Math.floor(i / cols);
+                const col = i % cols;
+                
+                const offsetX = col * cellWidth + padX;
+                const offsetY = row * cellHeight + padY;
+                const drawWidth = cellWidth - 2 * padX;
+                const drawHeight = cellHeight - 2 * padY;
+                
+                let scaleX, scaleY, finalOffsetX, finalOffsetY;
+                
+                if (aspectRatio > drawHeight / drawWidth) {
+                    scaleY = drawHeight;
+                    scaleX = scaleY / aspectRatio;
+                    finalOffsetX = offsetX + (drawWidth - scaleX) / 2;
+                    finalOffsetY = offsetY;
+                } else {
+                    scaleX = drawWidth;
+                    scaleY = scaleX * aspectRatio;
+                    finalOffsetX = offsetX;
+                    finalOffsetY = offsetY + (drawHeight - scaleY) / 2;
+                }
+
+                let values, colorScheme;
+                if (colorBy === 'elevation') {
+                    values = track.alts;
+                    colorScheme = 'viridis';
+                } else if (colorBy === 'heartrate') {
+                    values = track.hrs;
+                    colorScheme = 'rdylbu';
+                } else if (colorBy === 'speed') {
+                    values = track.speeds;
+                    colorScheme = 'plasma';
+                }
+
+                if (colorBy !== 'single' && values) {
+                    const min = Math.min(...values);
+                    const max = Math.max(...values);
+                    
+                    for (let j = 1; j < xs.length; j++) {
+                        const x1 = finalOffsetX + xs[j-1] * scaleX;
+                        const y1 = finalOffsetY + (1 - ys[j-1]) * scaleY;
+                        const x2 = finalOffsetX + xs[j] * scaleX;
+                        const y2 = finalOffsetY + (1 - ys[j]) * scaleY;
+                        
+                        ctx.strokeStyle = getColor(values[j], min, max, colorScheme);
+                        ctx.lineWidth = lineWidth;
+                        ctx.beginPath();
+                        ctx.moveTo(x1, y1);
+                        ctx.lineTo(x2, y2);
+                        ctx.stroke();
+                    }
+                } else {
+                    ctx.strokeStyle = '#3498db';
+                    ctx.lineWidth = lineWidth;
+                    ctx.beginPath();
+                    for (let j = 0; j < xs.length; j++) {
+                        const x = finalOffsetX + xs[j] * scaleX;
+                        const y = finalOffsetY + (1 - ys[j]) * scaleY;
+                        if (j === 0) ctx.moveTo(x, y);
+                        else ctx.lineTo(x, y);
+                    }
+                    ctx.stroke();
+                }
+
+                const prog = 50 + ((i + 1) / state.tracks.length) * 50;
+                progressBar.style.width = prog + '%';
+                progressBar.textContent = `绘制 ${i + 1}/${state.tracks.length}`;
+                
+                if (i % 10 === 0) {
+                    await new Promise(resolve => setTimeout(resolve, 0));
+                }
+            }
+        }
+
+        async function drawOverlayMode(ctx, width, height, colorBy, lineWidth) {
+            const allLats = state.tracks.flatMap(t => t.lats);
+            const allLons = state.tracks.flatMap(t => t.lons);
+            
+            const minLat = Math.min(...allLats);
+            const maxLat = Math.max(...allLats);
+            const minLon = Math.min(...allLons);
+            const maxLon = Math.max(...allLons);
+            
+            const latRange = maxLat - minLat;
+            const lonRange = maxLon - minLon;
+            const aspectRatio = latRange / (lonRange || 1);
+            
+            let scaleX, scaleY, offsetX, offsetY;
+            
+            if (aspectRatio > height / width) {
+                scaleY = height;
+                scaleX = scaleY / aspectRatio;
+                offsetX = (width - scaleX) / 2;
+                offsetY = 0;
+            } else {
+                scaleX = width;
+                scaleY = scaleX * aspectRatio;
+                offsetX = 0;
+                offsetY = (height - scaleY) / 2;
+            }
+
+            const alpha = parseFloat(document.getElementById('alpha').value);
+
+            for (let i = 0; i < state.tracks.length; i++) {
+                const track = state.tracks[i];
+                
+                const xs = track.lons.map(lon => offsetX + ((lon - minLon) / lonRange) * scaleX);
+                const ys = track.lats.map(lat => offsetY + (1 - (lat - minLat) / latRange) * scaleY);
+
+                let values, colorScheme;
+                if (colorBy === 'elevation') {
+                    values = track.alts;
+                    colorScheme = 'viridis';
+                } else if (colorBy === 'heartrate') {
+                    values = track.hrs;
+                    colorScheme = 'rdylbu';
+                } else if (colorBy === 'speed') {
+                    values = track.speeds;
+                    colorScheme = 'plasma';
+                }
+
+                ctx.globalAlpha = alpha;
+
+                if (colorBy !== 'single' && values) {
+                    const min = Math.min(...values);
+                    const max = Math.max(...values);
+                    
+                    for (let j = 1; j < xs.length; j++) {
+                        ctx.strokeStyle = getColor(values[j], min, max, colorScheme);
+                        ctx.lineWidth = lineWidth;
+                        ctx.beginPath();
+                        ctx.moveTo(xs[j-1], ys[j-1]);
+                        ctx.lineTo(xs[j], ys[j]);
+                        ctx.stroke();
+                    }
+                } else {
+                    ctx.strokeStyle = '#3498db';
+                    ctx.lineWidth = lineWidth;
+                    ctx.beginPath();
+                    for (let j = 0; j < xs.length; j++) {
+                        if (j === 0) ctx.moveTo(xs[j], ys[j]);
+                        else ctx.lineTo(xs[j], ys[j]);
+                    }
+                    ctx.stroke();
+                }
+
+                ctx.globalAlpha = 1.0;
+
+                const prog = 50 + ((i + 1) / state.tracks.length) * 50;
+                progressBar.style.width = prog + '%';
+                progressBar.textContent = `绘制 ${i + 1}/${state.tracks.length}`;
+                
+                if (i % 5 === 0) {
+                    await new Promise(resolve => setTimeout(resolve, 0));
+                }
+            }
+        }
+
+        function downloadImage() {
+            const link = document.createElement('a');
+            const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, -5);
+            link.download = `tracks_${timestamp}.png`;
+            link.href = canvas.toDataURL('image/png');
+            link.click();
+        }
+
+        window.removeFile = removeFile;
+    </script>
+</body>
+</html>
