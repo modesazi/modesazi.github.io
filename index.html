@@ -4,8 +4,49 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Hello World</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        .tools-section {
+            margin-top: 40px;
+        }
+        .tool-card {
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            padding: 20px;
+            margin: 10px 0;
+            transition: box-shadow 0.3s;
+        }
+        .tool-card:hover {
+            box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+        }
+        .tool-card h3 {
+            margin-top: 0;
+        }
+        .tool-card a {
+            color: #0066cc;
+            text-decoration: none;
+            font-weight: bold;
+        }
+        .tool-card a:hover {
+            text-decoration: underline;
+        }
+    </style>
 </head>
 <body>
     <h1>Hello, World!</h1>
+    
+    <div class="tools-section">
+        <h2>工具导航</h2>
+        <div class="tool-card">
+            <h3>轨迹可视化工具</h3>
+            <p>用于可视化和分析GPS轨迹数据的工具</p>
+            <a href="tools/track-visualizer.html">打开工具 →</a>
+        </div>
+    </div>
 </body>
 </html>
