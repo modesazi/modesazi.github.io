@@ -435,6 +435,16 @@
                         </div>
                     </div>
 
+                    <div class="input-group">
+                        <label>🏃 ITRA 积分（体能衡量）</label>
+                        <input type="number" id="itraScore" placeholder="输入 0-1000" min="0" max="1000" value="500">
+                        <div style="font-size: 0.85rem; color: #666; margin-top: 8px; line-height: 1.5;">
+                            <strong>参考值：</strong>
+                            300-400：入门级 | 400-600：进阶级 | 600-800：精英级 | 800+：世界级<br>
+                            <em>积分越高，体能衰减越慢，配速更稳定</em>
+                        </div>
+                    </div>
+
                     <div class="input-group" style="display: none;">
                         <label>📊 海拔数据平滑</label>
                         <select id="smoothWindow">
@@ -772,6 +782,12 @@
                 return;
             }
 
+            const itraScore = parseInt(document.getElementById('itraScore').value) || 500;
+            if (itraScore < 0 || itraScore > 1000) {
+                alert('ITRA 积分请输入 0-1000 之间的数值');
+                return;
+            }
+
             const coeffs = currentStrategy === 'custom' ? {
                 uphill: parseFloat(document.getElementById('uphillCoeff').value),
                 downhill: parseFloat(document.getElementById('downhillCoeff').value)
@@ -819,26 +835,47 @@
                 }
             }
 
-            let totalAdjustedTime = 0;
-            kmSegments.forEach(seg => {
-                const adjustFactor = seg.grade > 0 
-                    ? 1 + (seg.grade * coeffs.uphill / 100)
-                    : 1 + (seg.grade * coeffs.downhill / 100);
-                
-                seg.adjustFactor = Math.max(0.5, Math.min(2.5, adjustFactor));
-                totalAdjustedTime += seg.distance * seg.adjustFactor;
-            });
-
-            const basePacePerKm = targetTimeSeconds / totalAdjustedTime;
-            
+            let cumulativeDistance = 0;
+            let cumulativeAscent = 0;
+            let cumulativeDescent = 0;
             let cumulativeTime = 0;
+            
+            const initialPace = 60 / (0.012 * itraScore + 4);
+            
             kmSegments.forEach(seg => {
-                const segmentTime = seg.distance * seg.adjustFactor * basePacePerKm;
-                seg.paceSeconds = segmentTime / seg.distance;
+                const effortDistance = cumulativeDistance + 
+                                      cumulativeAscent / 100 + 
+                                      0.3 * cumulativeDescent / 100;
+                
+                const fatiguePace = calculateFatigueAdjustment(itraScore, effortDistance, cumulativeTime / 3600);
+                
+                const gradeAdjust = calculateGradeAdjustment(seg.grade, coeffs);
+                
+                const adjustedPace = fatiguePace * gradeAdjust;
+                
+                const segmentTime = seg.distance * adjustedPace * 60;
+                
+                seg.paceSeconds = adjustedPace * 60;
                 seg.segmentTime = segmentTime;
                 cumulativeTime += segmentTime;
                 seg.cumulativeTime = cumulativeTime;
+                
+                cumulativeDistance += seg.distance;
+                cumulativeAscent += seg.ascent;
+                cumulativeDescent += seg.descent;
             });
+            
+            const totalTime = kmSegments.reduce((sum, seg) => sum + seg.segmentTime, 0);
+            if (Math.abs(totalTime - targetTimeSeconds) > 60) {
+                const adjustmentFactor = targetTimeSeconds / totalTime;
+                cumulativeTime = 0;
+                kmSegments.forEach(seg => {
+                    seg.segmentTime *= adjustmentFactor;
+                    seg.paceSeconds *= adjustmentFactor;
+                    cumulativeTime += seg.segmentTime;
+                    seg.cumulativeTime = cumulativeTime;
+                });
+            }
 
             displayResults(kmSegments, targetTimeSeconds);
         }
@@ -1001,6 +1038,46 @@
             }
             
             return smoothedGrades;
+        }
+
+        function calculateFatigueAdjustment(itraScore, cumulativeEffort, cumulativeTime) {
+            const phi = 0.15 * Math.pow(1 - itraScore / 1000, 2.5);
+            
+            const basePace = 60 / (0.012 * itraScore + 4);
+            
+            const fatigueMultiplier = 1 + phi * (cumulativeEffort / 100) + 0.015 * cumulativeTime;
+            
+            return basePace * fatigueMultiplier;
+        }
+
+        function calculateGradeAdjustment(grade, coeffs) {
+            if (grade >= -0.5 && grade <= 0.5) {
+                return 1.0;
+            }
+            
+            if (grade > 0) {
+                const adjustment = 1 + (grade * coeffs.uphill / 100);
+                return Math.min(2.5, adjustment);
+            }
+            
+            const absGrade = Math.abs(grade);
+            
+            if (absGrade <= 5) {
+                const adjustment = 1 - (absGrade * coeffs.downhill / 100);
+                return Math.max(0.7, adjustment);
+            } else if (absGrade <= 10) {
+                const baseReduction = 5 * coeffs.downhill / 100;
+                const excessGrade = absGrade - 5;
+                const diminishingFactor = coeffs.downhill / 200;
+                const adjustment = 1 - baseReduction - (excessGrade * diminishingFactor);
+                return Math.max(0.75, adjustment);
+            } else {
+                const maxReduction = 5 * coeffs.downhill / 100 + 5 * coeffs.downhill / 200;
+                const excessGrade = absGrade - 10;
+                const penaltyFactor = coeffs.downhill / 300;
+                const adjustment = 1 - maxReduction + (excessGrade * penaltyFactor);
+                return Math.max(0.8, Math.min(1.2, adjustment));
+            }
         }
 
         function simplifyTrackPoints(points, maxPoints = 500) {
