@@ -279,7 +279,7 @@
 
         .summary-grid {
             display: grid;
-            grid-template-columns: repeat(4, 1fr);
+            grid-template-columns: repeat(5, 1fr);
             gap: 15px;
             margin-bottom: 20px;
         }
@@ -445,6 +445,34 @@
                         </div>
                     </div>
 
+                    <div class="input-group">
+                        <label>🎯 CP点设置</label>
+                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+                            <div>
+                                <label style="font-size: 0.85rem; color: #666; margin-bottom: 5px;">CP点数量</label>
+                                <input type="number" id="cpCount" placeholder="输入数量" min="0" value="0">
+                            </div>
+                            <div>
+                                <label style="font-size: 0.85rem; color: #666; margin-bottom: 5px;">平均停留时间（分钟）</label>
+                                <input type="number" id="cpTime" placeholder="输入分钟数" min="0" step="0.5" value="2">
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="input-group">
+                        <label>🎽 换装点设置</label>
+                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+                            <div>
+                                <label style="font-size: 0.85rem; color: #666; margin-bottom: 5px;">换装点数量</label>
+                                <input type="number" id="gearCount" placeholder="输入数量" min="0" value="0">
+                            </div>
+                            <div>
+                                <label style="font-size: 0.85rem; color: #666; margin-bottom: 5px;">平均停留时间（分钟）</label>
+                                <input type="number" id="gearTime" placeholder="输入分钟数" min="0" step="0.5" value="5">
+                            </div>
+                        </div>
+                    </div>
+
                     <div class="input-group" style="display: none;">
                         <label>📊 海拔数据平滑</label>
                         <select id="smoothWindow">
@@ -510,6 +538,11 @@
                             <div class="summary-label">平均配速</div>
                             <div class="summary-value" id="summaryPace">-</div>
                             <div class="summary-unit">分/km</div>
+                        </div>
+                        <div class="summary-card">
+                            <div class="summary-label">停留时间</div>
+                            <div class="summary-value" id="summaryStopTime">-</div>
+                            <div class="summary-unit">分钟</div>
                         </div>
                         <div class="summary-card">
                             <div class="summary-label">总爬升</div>
@@ -788,6 +821,19 @@
                 return;
             }
 
+            const cpCount = parseInt(document.getElementById('cpCount').value) || 0;
+            const cpTime = parseFloat(document.getElementById('cpTime').value) || 2;
+            const gearCount = parseInt(document.getElementById('gearCount').value) || 0;
+            const gearTime = parseFloat(document.getElementById('gearTime').value) || 5;
+            
+            const totalStopTime = (cpCount * cpTime + gearCount * gearTime) * 60;
+            const netMovingTime = targetTimeSeconds - totalStopTime;
+            
+            if (netMovingTime <= 0) {
+                alert('停留时间超过目标总时间，请调整输入');
+                return;
+            }
+
             const coeffs = currentStrategy === 'custom' ? {
                 uphill: parseFloat(document.getElementById('uphillCoeff').value),
                 downhill: parseFloat(document.getElementById('downhillCoeff').value)
@@ -866,8 +912,8 @@
             });
             
             const totalTime = kmSegments.reduce((sum, seg) => sum + seg.segmentTime, 0);
-            if (Math.abs(totalTime - targetTimeSeconds) > 60) {
-                const adjustmentFactor = targetTimeSeconds / totalTime;
+            if (Math.abs(totalTime - netMovingTime) > 60) {
+                const adjustmentFactor = netMovingTime / totalTime;
                 cumulativeTime = 0;
                 kmSegments.forEach(seg => {
                     seg.segmentTime *= adjustmentFactor;
@@ -877,14 +923,16 @@
                 });
             }
 
-            displayResults(kmSegments, targetTimeSeconds);
+            displayResults(kmSegments, targetTimeSeconds, totalStopTime);
         }
 
-        function displayResults(segments, targetTime) {
-            const avgPace = targetTime / trackData.totalDistance;
+        function displayResults(segments, targetTime, stopTime = 0) {
+            const netMovingTime = targetTime - stopTime;
+            const avgPace = netMovingTime / trackData.totalDistance;
 
             document.getElementById('summaryDistance').textContent = trackData.totalDistance.toFixed(2);
             document.getElementById('summaryPace').textContent = formatPace(avgPace);
+            document.getElementById('summaryStopTime').textContent = (stopTime / 60).toFixed(0);
             document.getElementById('summaryAscent').textContent = trackData.totalAscent.toFixed(0);
             document.getElementById('summaryDescent').textContent = trackData.totalDescent.toFixed(0);
 
@@ -1302,7 +1350,35 @@
         }
 
         function exportToCSV() {
-            const rows = [['公里', '累计爬升(m)', '累计下降(m)', '坡度(%)', '配速(分/km)', '用时', '累计时间']];
+            const cpCount = parseInt(document.getElementById('cpCount').value) || 0;
+            const cpTime = parseFloat(document.getElementById('cpTime').value) || 2;
+            const gearCount = parseInt(document.getElementById('gearCount').value) || 0;
+            const gearTime = parseFloat(document.getElementById('gearTime').value) || 5;
+            const itraScore = parseInt(document.getElementById('itraScore').value) || 500;
+            
+            const rows = [];
+            
+            rows.push(['配速计划导出']);
+            rows.push(['生成时间', new Date().toLocaleString('zh-CN')]);
+            rows.push([]);
+            
+            rows.push(['基本信息']);
+            rows.push(['总距离', document.getElementById('summaryDistance').textContent + ' km']);
+            rows.push(['总爬升', document.getElementById('summaryAscent').textContent + ' m']);
+            rows.push(['总下降', document.getElementById('summaryDescent').textContent + ' m']);
+            rows.push(['平均配速', document.getElementById('summaryPace').textContent + ' 分/km']);
+            rows.push(['ITRA积分', itraScore]);
+            rows.push([]);
+            
+            rows.push(['停留时间设置']);
+            rows.push(['CP点数量', cpCount + ' 个']);
+            rows.push(['CP点平均停留', cpTime + ' 分钟']);
+            rows.push(['换装点数量', gearCount + ' 个']);
+            rows.push(['换装点平均停留', gearTime + ' 分钟']);
+            rows.push(['总停留时间', document.getElementById('summaryStopTime').textContent + ' 分钟']);
+            rows.push([]);
+            
+            rows.push(['公里', '累计爬升(m)', '累计下降(m)', '坡度(%)', '配速(分/km)', '用时', '累计时间']);
             
             const tbody = document.getElementById('paceTableBody');
             for (let row of tbody.rows) {
