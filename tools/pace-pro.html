@@ -897,7 +897,9 @@
                 
                 const gradeAdjust = calculateGradeAdjustment(seg.grade, coeffs);
                 
-                const adjustedPace = fatiguePace * gradeAdjust;
+                const elevationChangeAdjust = calculateElevationChangeAdjustment(seg.ascent, seg.descent, seg.distance);
+                
+                const adjustedPace = fatiguePace * gradeAdjust * elevationChangeAdjust;
                 
                 const segmentTime = seg.distance * adjustedPace * 60;
                 
@@ -1096,6 +1098,29 @@
             const fatigueMultiplier = 1 + phi * (cumulativeEffort / 100) + 0.015 * cumulativeTime;
             
             return basePace * fatigueMultiplier;
+        }
+
+        function calculateElevationChangeAdjustment(ascent, descent, distanceKm) {
+            const totalElevationChange = ascent + descent;
+            const elevationChangePerKm = totalElevationChange / distanceKm;
+            
+            if (elevationChangePerKm < 10) {
+                return 1.0;
+            }
+            
+            let penaltyFactor = 0;
+            
+            if (elevationChangePerKm <= 50) {
+                penaltyFactor = (elevationChangePerKm - 10) / 40 * 0.15;
+            } else if (elevationChangePerKm <= 100) {
+                penaltyFactor = 0.15 + (elevationChangePerKm - 50) / 50 * 0.20;
+            } else if (elevationChangePerKm <= 200) {
+                penaltyFactor = 0.35 + (elevationChangePerKm - 100) / 100 * 0.20;
+            } else {
+                penaltyFactor = 0.55 + Math.min((elevationChangePerKm - 200) / 200 * 0.15, 0.15);
+            }
+            
+            return 1 + penaltyFactor;
         }
 
         function calculateGradeAdjustment(grade, coeffs) {
