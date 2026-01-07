@@ -436,40 +436,15 @@
                     </div>
 
                     <div class="input-group">
-                        <label>🏃 ITRA 积分（体能衡量）</label>
-                        <input type="number" id="itraScore" placeholder="输入 0-1000" min="0" max="1000" value="500">
-                        <div style="font-size: 0.85rem; color: #666; margin-top: 8px; line-height: 1.5;">
-                            <strong>参考值：</strong>
-                            300-400：入门级 | 400-600：进阶级 | 600-800：精英级 | 800+：世界级<br>
-                            <em>积分越高，体能衰减越慢，配速更稳定</em>
+                        <label>� 赛段划分 (站点位置及停留时间)</label>
+                        <label style="font-size: 0.85rem; color: #666; margin-bottom: 5px;">格式: 公里(分钟), 公里(分钟)...</label>
+                        <input type="text" id="cpLocations" placeholder="例如: 10(3), 19(3), 32(15)">
+                        <div style="margin-top: 10px; display: flex; align-items: center; gap: 8px;">
+                            <input type="checkbox" id="useCpSegments" style="width: auto;">
+                            <label for="useCpSegments" style="margin-bottom: 0; font-size: 0.9rem; cursor: pointer;">按站点划分段落显示</label>
                         </div>
-                    </div>
-
-                    <div class="input-group">
-                        <label>🎯 CP点设置</label>
-                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
-                            <div>
-                                <label style="font-size: 0.85rem; color: #666; margin-bottom: 5px;">CP点数量</label>
-                                <input type="number" id="cpCount" placeholder="输入数量" min="0" value="0">
-                            </div>
-                            <div>
-                                <label style="font-size: 0.85rem; color: #666; margin-bottom: 5px;">平均停留时间（分钟）</label>
-                                <input type="number" id="cpTime" placeholder="输入分钟数" min="0" step="0.5" value="2">
-                            </div>
-                        </div>
-                    </div>
-
-                    <div class="input-group">
-                        <label>🎽 换装点设置</label>
-                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
-                            <div>
-                                <label style="font-size: 0.85rem; color: #666; margin-bottom: 5px;">换装点数量</label>
-                                <input type="number" id="gearCount" placeholder="输入数量" min="0" value="0">
-                            </div>
-                            <div>
-                                <label style="font-size: 0.85rem; color: #666; margin-bottom: 5px;">平均停留时间（分钟）</label>
-                                <input type="number" id="gearTime" placeholder="输入分钟数" min="0" step="0.5" value="5">
-                            </div>
+                        <div style="font-size: 0.85rem; color: #666; margin-top: 8px; line-height: 1.4;">
+                            <em>* 括号内为该站点的停留时间（分钟），不填默认为 0</em>
                         </div>
                     </div>
 
@@ -683,24 +658,28 @@
             const parser = new DOMParser();
             const xml = parser.parseFromString(text, 'text/xml');
             
-            const trackpoints = xml.querySelectorAll('trkpt');
+            // 使用 getElementsByTagName 处理可能的命名空间问题
+            const trackpoints = xml.getElementsByTagName('trkpt');
             const data = [];
             
-            trackpoints.forEach(point => {
+            for (let i = 0; i < trackpoints.length; i++) {
+                const point = trackpoints[i];
                 const lat = parseFloat(point.getAttribute('lat'));
                 const lon = parseFloat(point.getAttribute('lon'));
-                const eleNode = point.querySelector('ele');
-                const timeNode = point.querySelector('time');
                 
-                if (lat && lon && eleNode) {
+                // 兼容不同层级的 ele 标签
+                const eleNode = point.getElementsByTagName('ele')[0];
+                const timeNode = point.getElementsByTagName('time')[0];
+                
+                if (!isNaN(lat) && !isNaN(lon)) {
                     data.push({
                         lat: lat,
                         lon: lon,
-                        ele: parseFloat(eleNode.textContent),
+                        ele: eleNode ? parseFloat(eleNode.textContent) : (data.length > 0 ? data[data.length-1].ele : 0),
                         time: timeNode ? new Date(timeNode.textContent) : null
                     });
                 }
-            });
+            }
             
             return data;
         }
@@ -710,24 +689,25 @@
             const parser = new DOMParser();
             const xml = parser.parseFromString(text, 'text/xml');
             
-            const trackpoints = xml.querySelectorAll('Trackpoint');
+            const trackpoints = xml.getElementsByTagName('Trackpoint');
             const data = [];
             
-            trackpoints.forEach(point => {
-                const latNode = point.querySelector('LatitudeDegrees');
-                const lonNode = point.querySelector('LongitudeDegrees');
-                const eleNode = point.querySelector('AltitudeMeters');
-                const timeNode = point.querySelector('Time');
+            for (let i = 0; i < trackpoints.length; i++) {
+                const point = trackpoints[i];
+                const latNode = point.getElementsByTagName('LatitudeDegrees')[0];
+                const lonNode = point.getElementsByTagName('LongitudeDegrees')[0];
+                const eleNode = point.getElementsByTagName('AltitudeMeters')[0];
+                const timeNode = point.getElementsByTagName('Time')[0];
                 
-                if (latNode && lonNode && eleNode) {
+                if (latNode && lonNode) {
                     data.push({
                         lat: parseFloat(latNode.textContent),
                         lon: parseFloat(lonNode.textContent),
-                        ele: parseFloat(eleNode.textContent),
+                        ele: eleNode ? parseFloat(eleNode.textContent) : (data.length > 0 ? data[data.length-1].ele : 0),
                         time: timeNode ? new Date(timeNode.textContent) : null
                     });
                 }
-            });
+            }
             
             return data;
         }
@@ -758,6 +738,9 @@
         }
 
         function processTrackData(data) {
+            if (!data || data.length === 0) {
+                throw new Error('文件中未找到有效的轨迹点，请检查文件格式');
+            }
             const smoothWindow = parseInt(document.getElementById('smoothWindow').value);
             const smoothedData = smoothElevation(data, smoothWindow);
             
@@ -815,18 +798,30 @@
                 return;
             }
 
-            const itraScore = parseInt(document.getElementById('itraScore').value) || 500;
-            if (itraScore < 0 || itraScore > 1000) {
-                alert('ITRA 积分请输入 0-1000 之间的数值');
-                return;
+            const itraScore = 500;
+            const useCpSegments = document.getElementById('useCpSegments').checked;
+            const cpLocationsStr = document.getElementById('cpLocations').value;
+            
+            let cpData = [];
+            let totalStopTime = 0;
+
+            if (cpLocationsStr) {
+                // 解析格式: 10(3), 19(3), 32(15)
+                const parts = cpLocationsStr.split(',');
+                parts.forEach(part => {
+                    const match = part.trim().match(/^([\d.]+)(?:\(([\d.]+)\))?$/);
+                    if (match) {
+                        const dist = parseFloat(match[1]);
+                        const stop = match[2] ? parseFloat(match[2]) : 0;
+                        if (!isNaN(dist) && dist > 0 && dist < trackData.totalDistance) {
+                            cpData.push({ distance: dist, stopTime: stop });
+                            totalStopTime += stop * 60;
+                        }
+                    }
+                });
+                cpData.sort((a, b) => a.distance - b.distance);
             }
 
-            const cpCount = parseInt(document.getElementById('cpCount').value) || 0;
-            const cpTime = parseFloat(document.getElementById('cpTime').value) || 2;
-            const gearCount = parseInt(document.getElementById('gearCount').value) || 0;
-            const gearTime = parseFloat(document.getElementById('gearTime').value) || 5;
-            
-            const totalStopTime = (cpCount * cpTime + gearCount * gearTime) * 60;
             const netMovingTime = targetTimeSeconds - totalStopTime;
             
             if (netMovingTime <= 0) {
@@ -839,96 +834,122 @@
                 downhill: parseFloat(document.getElementById('downhillCoeff').value)
             } : strategyCoefficients[currentStrategy];
 
-            const kmSegments = [];
-            let currentKm = 0;
+            const segments = [];
             let segmentStart = 0;
             
-            for (let i = 1; i < trackData.points.length; i++) {
-                const targetDist = (currentKm + 1);
+            if (useCpSegments && cpData.length > 0) {
+                const targets = [...cpData.map(c => c.distance), trackData.totalDistance];
+                let currentTargetIdx = 0;
                 
-                if (trackData.points[i].distance >= targetDist || i === trackData.points.length - 1) {
-                    const segmentPoints = trackData.points.slice(segmentStart, i + 1);
-                    const segmentDist = trackData.points[i].distance - trackData.points[segmentStart].distance;
-                    const eleChange = trackData.points[i].ele - trackData.points[segmentStart].ele;
-                    const grade = segmentDist > 0 ? (eleChange / (segmentDist * 1000)) * 100 : 0;
-                    
-                    let ascent = 0;
-                    let descent = 0;
-                    for (let j = segmentStart + 1; j <= i; j++) {
-                        const diff = trackData.points[j].ele - trackData.points[j - 1].ele;
-                        if (diff > 0) {
-                            ascent += diff;
-                        } else {
-                            descent += Math.abs(diff);
+                for (let i = 1; i < trackData.points.length; i++) {
+                    if (trackData.points[i].distance >= targets[currentTargetIdx] || i === trackData.points.length - 1) {
+                        const segmentDist = trackData.points[i].distance - trackData.points[segmentStart].distance;
+                        const eleChange = trackData.points[i].ele - trackData.points[segmentStart].ele;
+                        const grade = segmentDist > 0 ? (eleChange / (segmentDist * 1000)) * 100 : 0;
+                        
+                        let ascent = 0, descent = 0;
+                        for (let j = segmentStart + 1; j <= i; j++) {
+                            const diff = trackData.points[j].ele - trackData.points[j - 1].ele;
+                            if (diff > 0) ascent += diff; else descent += Math.abs(diff);
                         }
+                        
+                        const isLast = currentTargetIdx === targets.length - 1;
+                        const stopTime = isLast ? 0 : cpData[currentTargetIdx].stopTime;
+                        const label = isLast ? `终点` : `CP${currentTargetIdx + 1}`;
+
+                        segments.push({
+                            label: label,
+                            km: targets[currentTargetIdx].toFixed(1),
+                            distance: segmentDist,
+                            ascent, descent, grade,
+                            stopTime: stopTime
+                        });
+                        
+                        segmentStart = i;
+                        currentTargetIdx++;
+                        if (currentTargetIdx >= targets.length) break;
                     }
-                    
-                    kmSegments.push({
-                        km: currentKm + 1,
-                        distance: segmentDist,
-                        eleChange: eleChange,
-                        ascent: ascent,
-                        descent: descent,
-                        grade: grade,
-                        startEle: trackData.points[segmentStart].ele,
-                        endEle: trackData.points[i].ele
-                    });
-                    
-                    currentKm++;
-                    segmentStart = i;
-                    
-                    if (trackData.points[i].distance >= trackData.totalDistance) break;
+                }
+            } else {
+                let currentKm = 0;
+                for (let i = 1; i < trackData.points.length; i++) {
+                    const targetDist = (currentKm + 1);
+                    if (trackData.points[i].distance >= targetDist || i === trackData.points.length - 1) {
+                        const segmentDist = trackData.points[i].distance - trackData.points[segmentStart].distance;
+                        const eleChange = trackData.points[i].ele - trackData.points[segmentStart].ele;
+                        const grade = segmentDist > 0 ? (eleChange / (segmentDist * 1000)) * 100 : 0;
+                        
+                        let ascent = 0, descent = 0;
+                        for (let j = segmentStart + 1; j <= i; j++) {
+                            const diff = trackData.points[j].ele - trackData.points[j - 1].ele;
+                            if (diff > 0) ascent += diff; else descent += Math.abs(diff);
+                        }
+                        
+                        let stopTime = 0;
+                        const prevDist = trackData.points[segmentStart].distance;
+                        const currDist = trackData.points[i].distance;
+                        cpData.forEach(cp => {
+                            if (cp.distance > prevDist && cp.distance <= currDist) {
+                                stopTime += cp.stopTime;
+                            }
+                        });
+
+                        let label = `${currentKm + 1}`;
+
+                        segments.push({
+                            label: label,
+                            km: currentKm + 1,
+                            distance: segmentDist,
+                            ascent, descent, grade,
+                            stopTime: stopTime
+                        });
+                        
+                        currentKm++;
+                        segmentStart = i;
+                        if (trackData.points[i].distance >= trackData.totalDistance) break;
+                    }
                 }
             }
 
-            let cumulativeDistance = 0;
-            let cumulativeAscent = 0;
-            let cumulativeDescent = 0;
-            let cumulativeTime = 0;
+            let cumulativeDistance = 0, cumulativeAscent = 0, cumulativeDescent = 0, cumulativeTime = 0;
             
-            const initialPace = 60 / (0.012 * itraScore + 4);
-            
-            kmSegments.forEach(seg => {
-                const effortDistance = cumulativeDistance + 
-                                      cumulativeAscent / 100 + 
-                                      0.3 * cumulativeDescent / 100;
-                
+            segments.forEach(seg => {
+                const effortDistance = cumulativeDistance + cumulativeAscent / 100 + 0.3 * cumulativeDescent / 100;
                 const fatiguePace = calculateFatigueAdjustment(itraScore, effortDistance, cumulativeTime / 3600);
-                
                 const gradeAdjust = calculateGradeAdjustment(seg.grade, coeffs);
-                
                 const elevationChangeAdjust = calculateElevationChangeAdjustment(seg.ascent, seg.descent, seg.distance);
                 
                 const adjustedPace = fatiguePace * gradeAdjust * elevationChangeAdjust;
-                
                 const segmentTime = seg.distance * adjustedPace * 60;
                 
                 seg.paceSeconds = adjustedPace * 60;
                 seg.segmentTime = segmentTime;
-                cumulativeTime += segmentTime;
-                seg.cumulativeTime = cumulativeTime;
                 
                 cumulativeDistance += seg.distance;
                 cumulativeAscent += seg.ascent;
                 cumulativeDescent += seg.descent;
             });
             
-            const totalTime = kmSegments.reduce((sum, seg) => sum + seg.segmentTime, 0);
-            if (Math.abs(totalTime - netMovingTime) > 60) {
-                const adjustmentFactor = netMovingTime / totalTime;
-                cumulativeTime = 0;
-                kmSegments.forEach(seg => {
-                    seg.segmentTime *= adjustmentFactor;
-                    seg.paceSeconds *= adjustmentFactor;
-                    cumulativeTime += seg.segmentTime;
-                    seg.cumulativeTime = cumulativeTime;
-                });
-            }
+            const totalTime = segments.reduce((sum, seg) => sum + seg.segmentTime, 0);
+            const adjustmentFactor = netMovingTime / totalTime;
+            cumulativeTime = 0;
+            segments.forEach(seg => {
+                seg.segmentTime *= adjustmentFactor;
+                seg.paceSeconds *= adjustmentFactor;
+                
+                // 累计时间 = 之前的累计时间 + 本段运动时间
+                cumulativeTime += seg.segmentTime;
+                seg.arrivalTime = cumulativeTime; // 到达时间
+                
+                // 加上本站停留时间
+                cumulativeTime += (seg.stopTime || 0) * 60;
+                seg.cumulativeTime = cumulativeTime; // 离开时间
+            });
 
-            displayResults(kmSegments, targetTimeSeconds, totalStopTime);
+            displayResults(segments, targetTimeSeconds, totalStopTime, useCpSegments);
         }
 
-        function displayResults(segments, targetTime, stopTime = 0) {
+        function displayResults(segments, targetTime, stopTime = 0, isCpBased = false) {
             const netMovingTime = targetTime - stopTime;
             const avgPace = netMovingTime / trackData.totalDistance;
 
@@ -938,18 +959,31 @@
             document.getElementById('summaryAscent').textContent = trackData.totalAscent.toFixed(0);
             document.getElementById('summaryDescent').textContent = trackData.totalDescent.toFixed(0);
 
+            const thead = document.querySelector('#paceTable thead tr');
+            thead.innerHTML = `
+                <th>${isCpBased ? '段落' : '公里'}</th>
+                <th>距离 (km)</th>
+                <th>分段爬升 (m)</th>
+                <th>分段下降 (m)</th>
+                <th>配速 (分/km)</th>
+                <th>运动用时</th>
+                <th>停留 (分)</th>
+                <th>累计时间</th>
+            `;
+
             const tbody = document.getElementById('paceTableBody');
             tbody.innerHTML = '';
             
             segments.forEach(seg => {
                 const row = tbody.insertRow();
                 row.innerHTML = `
-                    <td>${seg.km}</td>
+                    <td>${seg.label}</td>
+                    <td>${seg.distance.toFixed(2)}</td>
                     <td>${seg.ascent.toFixed(1)}</td>
                     <td>${seg.descent.toFixed(1)}</td>
-                    <td class="${seg.grade > 0 ? 'grade-positive' : 'grade-negative'}">${seg.grade > 0 ? '+' : ''}${seg.grade.toFixed(2)}</td>
                     <td>${formatPace(seg.paceSeconds)}</td>
                     <td>${formatTime(seg.segmentTime)}</td>
+                    <td>${seg.stopTime || 0}</td>
                     <td>${formatTime(seg.cumulativeTime)}</td>
                 `;
             });
@@ -1375,11 +1409,7 @@
         }
 
         function exportToCSV() {
-            const cpCount = parseInt(document.getElementById('cpCount').value) || 0;
-            const cpTime = parseFloat(document.getElementById('cpTime').value) || 2;
-            const gearCount = parseInt(document.getElementById('gearCount').value) || 0;
-            const gearTime = parseFloat(document.getElementById('gearTime').value) || 5;
-            const itraScore = parseInt(document.getElementById('itraScore').value) || 500;
+            const cpLocationsStr = document.getElementById('cpLocations').value;
             
             const rows = [];
             
@@ -1392,18 +1422,14 @@
             rows.push(['总爬升', document.getElementById('summaryAscent').textContent + ' m']);
             rows.push(['总下降', document.getElementById('summaryDescent').textContent + ' m']);
             rows.push(['平均配速', document.getElementById('summaryPace').textContent + ' 分/km']);
-            rows.push(['ITRA积分', itraScore]);
             rows.push([]);
             
-            rows.push(['停留时间设置']);
-            rows.push(['CP点数量', cpCount + ' 个']);
-            rows.push(['CP点平均停留', cpTime + ' 分钟']);
-            rows.push(['换装点数量', gearCount + ' 个']);
-            rows.push(['换装点平均停留', gearTime + ' 分钟']);
+            rows.push(['赛段设置']);
+            rows.push(['站点位置及停留', cpLocationsStr]);
             rows.push(['总停留时间', document.getElementById('summaryStopTime').textContent + ' 分钟']);
             rows.push([]);
             
-            rows.push(['公里', '累计爬升(m)', '累计下降(m)', '坡度(%)', '配速(分/km)', '用时', '累计时间']);
+            rows.push(['段落/公里', '距离(km)', '分段爬升(m)', '分段下降(m)', '配速(分/km)', '运动用时', '停留(分)', '累计时间']);
             
             const tbody = document.getElementById('paceTableBody');
             for (let row of tbody.rows) {
