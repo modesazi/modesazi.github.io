@@ -561,6 +561,7 @@
         let elevationChart = null;
         let routeMap = null;
         let routeLayer = null;
+        let cpLayer = null;
         let hoverMarker = null;
         let initialBounds = null;
         let currentStrategy = 'standard';
@@ -666,6 +667,47 @@
                     document.getElementById('useCpSegments').checked = true;
                 }
             }
+        }
+
+        function drawCpMarkers(cpData) {
+            if (!routeMap || !trackData) return;
+            
+            if (cpLayer) {
+                routeMap.removeLayer(cpLayer);
+                cpLayer = null;
+            }
+            
+            if (!cpData || cpData.length === 0) return;
+            
+            const markers = cpData.map((cp, index) => {
+                const point = findPointAtDistance(cp.distance);
+                if (!point) return null;
+                
+                return L.marker([point.lat, point.lon], {
+                    icon: L.divIcon({
+                        className: 'cp-marker',
+                        html: `<div style="position: relative; width: 0; height: 0;">
+                                <div style="position: absolute; transform: translate(-50%, -50%); width: 14px; height: 14px; background: #9c27b0; border: 2px solid white; border-radius: 50%; box-shadow: 0 2px 4px rgba(0,0,0,0.3);"></div>
+                                <div style="position: absolute; bottom: 8px; left: 50%; transform: translateX(-50%); background: rgba(255,255,255,0.9); padding: 1px 4px; border-radius: 3px; font-size: 10px; white-space: nowrap; box-shadow: 0 1px 2px rgba(0,0,0,0.2); font-weight: bold; color: #6a1b9a; border: 1px solid #e1bee7;">CP${index + 1}</div>
+                               </div>`,
+                        iconSize: [0, 0]
+                    }),
+                    zIndexOffset: 500
+                }).bindPopup(`<b>CP${index + 1}</b><br>距离: ${cp.distance.toFixed(1)} km<br>停留: ${cp.stopTime} 分`);
+            }).filter(m => m !== null);
+            
+            if (markers.length > 0) {
+                cpLayer = L.layerGroup(markers).addTo(routeMap);
+            }
+        }
+
+        function findPointAtDistance(targetKm) {
+             if (!trackData || !trackData.points) return null;
+             const points = trackData.points;
+             for(let i=0; i<points.length; i++) {
+                 if (points[i].distance >= targetKm) return points[i];
+             }
+             return points[points.length-1];
         }
 
         async function handleFile(file) {
@@ -907,6 +949,8 @@
                 cpData.sort((a, b) => a.distance - b.distance);
             }
 
+            drawCpMarkers(cpData);
+
             const netMovingTime = targetTimeSeconds - totalStopTime;
             
             if (netMovingTime <= 0) {
@@ -1037,10 +1081,10 @@
                 seg.cumulativeTime = cumulativeTime; // 离开时间
             });
 
-            displayResults(segments, targetTimeSeconds, totalStopTime, useCpSegments);
+            displayResults(segments, targetTimeSeconds, totalStopTime, useCpSegments, cpData);
         }
 
-        function displayResults(segments, targetTime, stopTime = 0, isCpBased = false) {
+        function displayResults(segments, targetTime, stopTime = 0, isCpBased = false, cpData = []) {
             const netMovingTime = targetTime - stopTime;
             const avgPace = netMovingTime / trackData.totalDistance;
 
@@ -1079,13 +1123,13 @@
                 `;
             });
 
-            updateElevationChart(segments);
+            updateElevationChart(segments, cpData);
             resultsSection.classList.add('active');
         }
 
         let hoverThrottle = null;
 
-        function updateElevationChart(segments) {
+        function updateElevationChart(segments, cpData = []) {
             const ctx = document.getElementById('elevationChart').getContext('2d');
             
             if (elevationChart) {
@@ -1094,11 +1138,37 @@
 
             const chartData = prepareChartData();
             
+            // 准备 CP 点数据
+            const cpPoints = new Array(chartData.elevations.length).fill(null);
+            const cpTooltips = new Array(chartData.elevations.length).fill(null);
+            
+            if (cpData && cpData.length > 0) {
+                cpData.forEach((cp, index) => {
+                    // 在采样点中寻找最近的点
+                    let closestIdx = -1;
+                    let minDiff = Infinity;
+                    
+                    chartData.distances.forEach((d, idx) => {
+                        const diff = Math.abs(d - cp.distance);
+                        if (diff < minDiff) {
+                            minDiff = diff;
+                            closestIdx = idx;
+                        }
+                    });
+                    
+                    if (closestIdx !== -1) {
+                         cpPoints[closestIdx] = chartData.elevations[closestIdx];
+                         cpTooltips[closestIdx] = `CP${index + 1}: ${cp.distance.toFixed(1)}km`;
+                    }
+                });
+            }
+
             elevationChart = new Chart(ctx, {
                 type: 'line',
                 data: {
                     labels: chartData.labels,
-                    datasets: [{
+                    datasets: [
+                    {
                         label: '海拔 (m)',
                         data: chartData.elevations,
                         fill: true,
@@ -1106,6 +1176,7 @@
                         pointRadius: 0,
                         pointHoverRadius: 4,
                         borderWidth: 3,
+                        order: 2,
                         segment: {
                             borderColor: ctx => {
                                 const idx = ctx.p0DataIndex;
@@ -1116,7 +1187,23 @@
                                 return chartData.backgroundColors[idx] || 'rgba(102, 126, 234, 0.1)';
                             }
                         }
-                    }]
+                    },
+                    {
+                        label: '站点 (CP)',
+                        data: cpPoints,
+                        type: 'line',
+                        fill: false,
+                        showLine: false,
+                        pointRadius: 6,
+                        pointHoverRadius: 8,
+                        pointStyle: 'circle',
+                        backgroundColor: '#9c27b0',
+                        borderColor: '#ffffff',
+                        borderWidth: 2,
+                        order: 1,
+                        zIndex: 100 // Ensure it's on top
+                    }
+                    ]
                 },
                 options: {
                     responsive: true,
@@ -1130,9 +1217,13 @@
                     },
                     onHover: (event, activeElements) => {
                         if (activeElements.length > 0 && routeMap) {
-                            const index = activeElements[0].index;
-                            const originalIndex = chartData.originalIndexMap[index];
-                            updateMapMarkerByIndex(originalIndex);
+                            // Find the elevation dataset element
+                            const eleElement = activeElements.find(e => e.datasetIndex === 0);
+                            if (eleElement) {
+                                const index = eleElement.index;
+                                const originalIndex = chartData.originalIndexMap[index];
+                                updateMapMarkerByIndex(originalIndex);
+                            }
                         } else {
                             if (hoverMarker && routeMap) {
                                 routeMap.removeLayer(hoverMarker);
@@ -1147,6 +1238,10 @@
                         tooltip: {
                             callbacks: {
                                 label: function(context) {
+                                    if (context.datasetIndex === 1) {
+                                        // CP tooltip
+                                        return cpTooltips[context.dataIndex] || '';
+                                    }
                                     const grade = chartData.grades[context.dataIndex];
                                     return [
                                         `海拔: ${context.parsed.y.toFixed(1)} m`,
@@ -1388,6 +1483,7 @@
         function initializeMap() {
             if (routeMap) {
                 routeMap.remove();
+                cpLayer = null;
             }
             
             routeMap = L.map('mapContainer').setView([0, 0], 13);
