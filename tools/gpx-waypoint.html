@@ -1,0 +1,1089 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GPX/TCX 航点添加工具</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+            color: #333;
+            line-height: 1.6;
+        }
+
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+        }
+
+        header {
+            text-align: center;
+            color: white;
+            margin-bottom: 30px;
+        }
+
+        h1 {
+            font-size: 2.5rem;
+            margin-bottom: 10px;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.2);
+        }
+
+        .subtitle {
+            font-size: 1.1rem;
+            opacity: 0.9;
+        }
+
+        .card {
+            background: white;
+            border-radius: 12px;
+            padding: 25px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+            margin-bottom: 20px;
+        }
+
+        .card h2 {
+            color: #667eea;
+            margin-bottom: 20px;
+            font-size: 1.3rem;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .upload-area {
+            border: 3px dashed #667eea;
+            border-radius: 8px;
+            padding: 40px 20px;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.3s;
+            margin-bottom: 20px;
+            position: relative;
+        }
+
+        .upload-area:hover, .upload-area.drag-over {
+            border-color: #764ba2;
+            background: #f8f9ff;
+        }
+
+        .upload-area input[type="file"] {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            opacity: 0;
+            cursor: pointer;
+        }
+
+        .upload-icon {
+            font-size: 3rem;
+            margin-bottom: 10px;
+            display: block;
+        }
+        
+        .file-name-display {
+            margin-top: 10px;
+            font-weight: 500;
+            color: #667eea;
+        }
+
+        .input-group {
+            margin-bottom: 20px;
+        }
+
+        .input-group label {
+            display: block;
+            color: #333;
+            font-weight: 500;
+            margin-bottom: 8px;
+        }
+
+        .input-group input {
+            width: 100%;
+            padding: 10px;
+            border: 2px solid #e0e0e0;
+            border-radius: 6px;
+            font-size: 1rem;
+            transition: border-color 0.3s;
+        }
+
+        .input-group input:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+
+        .row {
+            display: flex;
+            gap: 1rem;
+            align-items: flex-end;
+        }
+        
+        .col {
+            flex: 1;
+        }
+
+        .btn {
+            padding: 12px 24px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-size: 1rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: transform 0.2s, box-shadow 0.2s;
+            text-align: center;
+            display: inline-block;
+        }
+
+        .btn:hover:not(:disabled) {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4);
+        }
+
+        .btn-full {
+            width: 100%;
+            font-size: 1.1rem;
+            padding: 15px;
+        }
+
+        .btn:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+            transform: none;
+            box-shadow: none;
+        }
+        
+        /* Specific adjust for the add button to match input height */
+        .btn-add {
+           height: 48px; 
+           padding: 0 30px;
+           margin-bottom: 2px; /* Accessability alignment */
+        }
+
+        #waypointList {
+            list-style: none;
+            padding: 0;
+            margin: 0;
+            margin-top: 20px;
+        }
+        
+        .waypoint-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 15px;
+            background: #f8f9ff;
+            border: 1px solid #e0e0e0;
+            margin-bottom: 10px;
+            border-radius: 8px;
+            transition: all 0.2s;
+        }
+        
+        .waypoint-item:hover {
+             border-color: #667eea;
+        }
+
+        .waypoint-info {
+            font-weight: 600;
+            color: #2c3e50;
+            font-size: 1.1rem;
+        }
+        
+        .waypoint-details {
+            font-size: 0.9em;
+            color: #667eea;
+            margin-left: 10px;
+            background: rgba(102, 126, 234, 0.1);
+            padding: 4px 8px;
+            border-radius: 4px;
+        }
+        
+        .delete-btn {
+            background: #ff6b6b;
+            color: white;
+            border: none;
+            padding: 6px 12px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 0.9rem;
+            transition: background 0.2s;
+            margin-left: 0.5rem;
+        }
+        
+        .delete-btn:hover {
+            background: #fa5252; 
+        }
+
+        .edit-btn {
+            background: #f0c541; 
+            color: #333;
+            border: none;
+            padding: 6px 12px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 0.9rem;
+            transition: background 0.2s;
+        }
+
+        .edit-btn:hover {
+            background: #e0b430;
+        }
+        
+        .cancel-btn {
+            background: #999; 
+            color: white;
+            border: none;
+            padding: 12px 15px; 
+            border-radius: 8px;
+            font-size: 1rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background 0.2s;
+            margin-left: 0.5rem;
+            display: none; /* Initially hidden */
+        }
+        
+        .cancel-btn:hover {
+            background: #777;
+        }
+
+        .error {
+            color: #ff6b6b;
+            margin-top: 0.5rem;
+            font-size: 0.875rem;
+            display: none;
+            background: rgba(255, 107, 107, 0.1);
+            padding: 10px;
+            border-radius: 6px;
+        }
+        
+        .empty-state {
+            color: #999;
+            font-style: italic;
+            padding: 30px;
+            text-align: center;
+            border: 2px dashed #e0e0e0;
+            border-radius: 8px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>GPX/TCX 航点添加工具</h1>
+            <p class="subtitle">轻松为你的 GPX/TCX 轨迹文件添加带距离的航点信息</p>
+        </header>
+
+        <div class="card">
+            <h2>1. 上传 GPX/TCX 文件</h2>
+            <div class="upload-area" id="dropZone">
+                <span class="upload-icon">📂</span>
+                <div>点击选择或拖拽 GPX/TCX 文件到这里</div>
+                <div id="fileNameDisplay" class="file-name-display"></div>
+                <input type="file" id="gpxParams" accept=".gpx, .tcx">
+            </div>
+        </div>
+
+        <div class="card">
+            <h2>2. 添加航点</h2>
+            <div class="row">
+                <div class="col input-group" style="margin-bottom: 0;">
+                    <label for="wpDistance">距离 (公里)</label>
+                    <input type="number" id="wpDistance" step="0.01" min="0" placeholder="例如: 5.0">
+                </div>
+                <div class="col input-group" style="margin-bottom: 0;">
+                    <label for="wpName">名称</label>
+                    <input type="text" id="wpName" placeholder="例如: CP1 补给站">
+                </div>
+                <div>
+                     <!-- Empty label for alignment -->
+                     <div style="height: 29px;"></div>
+                    <div style="display: flex;">
+                        <button onclick="addWaypoint()" class="btn btn-add" id="addBtn">添加</button>
+                        <button onclick="cancelEdit()" class="cancel-btn" id="cancelBtn">取消</button>
+                    </div>
+                </div>
+            </div>
+            <div id="addError" class="error">请输入有效的距离和名称</div>
+            
+            <div style="margin-top: 1.5rem;">
+                <label style="font-weight: 500; color: #333; margin-bottom: 10px; display: block;">已添加的航点列表：</label>
+                <div id="listPlaceholder" class="empty-state">暂时没有添加航点</div>
+                <ul id="waypointList">
+                    <!-- 列表项会在这里生成 -->
+                </ul>
+            </div>
+        </div>
+
+        <div class="card">
+            <h2 style="font-size: 1.25rem; font-weight: 600; color: #2d3748; margin-bottom: 20px; display: flex; align-items: center;">
+                <span class="step-icon">3</span>
+                处理导出
+            </h2>
+            <div style="margin-bottom: 20px; background: #f8f9fa; padding: 15px; border-radius: 8px; border: 1px solid #e9ecef;">
+                <label style="display: flex; align-items: flex-start; cursor: pointer;">
+                    <input type="checkbox" id="useOSRM" style="width: 18px; height: 18px; margin-right: 12px; margin-top: 3px;">
+                    <div>
+                        <strong style="display: block; color: #2d3748; margin-bottom: 4px;">使用 OSRM 优化路径 (Snap to Road)</strong>
+                        <span style="font-size: 0.9em; color: #718096; line-height: 1.4; display: block;">选中此项，系统会将轨迹点发送至 OSRM 服务器进行道路匹配。能将直线轨迹修正为贴合道路的平滑曲线，但处理时间较长。</span>
+                    </div>
+                </label>
+            </div>
+            <button id="downloadBtn" class="btn btn-full" onclick="processAndDownload()" disabled>处理并下载文件</button>
+        </div>
+    </div>
+    
+    <!-- Spinner Overlay -->
+    <div id="loadingOverlay" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 9999; justify-content: center; align-items: center; flex-direction: column;">
+        <div style="border: 4px solid #f3f3f3; border-top: 4px solid #4a90e2; border-radius: 50%; width: 40px; height: 40px; animation: spin 1s linear infinite;"></div>
+        <div id="loadingText" style="color: white; margin-top: 15px; font-weight: bold; text-shadow: 0 1px 2px rgba(0,0,0,0.2);">正在处理...</div>
+    </div>
+    <style>@keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }</style>
+
+    <script>
+        let waypoints = [];
+        let editingId = null;
+        const fileInput = document.getElementById('gpxParams');
+        const downloadBtn = document.getElementById('downloadBtn');
+        const dropZone = document.getElementById('dropZone');
+        const fileNameDisplay = document.getElementById('fileNameDisplay');
+        const addBtn = document.getElementById('addBtn');
+        const cancelBtn = document.getElementById('cancelBtn');
+
+        // Drag and drop effects
+        ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
+            dropZone.addEventListener(eventName, preventDefaults, false);
+        });
+
+        function preventDefaults(e) {
+            e.preventDefault();
+            e.stopPropagation();
+        }
+
+        ['dragenter', 'dragover'].forEach(eventName => {
+            dropZone.addEventListener(eventName, highlight, false);
+        });
+
+        ['dragleave', 'drop'].forEach(eventName => {
+            dropZone.addEventListener(eventName, unhighlight, false);
+        });
+
+        function highlight(e) {
+            dropZone.classList.add('drag-over');
+        }
+
+        function unhighlight(e) {
+            dropZone.classList.remove('drag-over');
+        }
+
+        dropZone.addEventListener('drop', handleDrop, false);
+
+        function handleDrop(e) {
+            const dt = e.dataTransfer;
+            const files = dt.files;
+            fileInput.files = files;
+            handleFileSelect();
+        }
+
+        fileInput.addEventListener('change', handleFileSelect);
+
+        async function handleFileSelect() {
+            updateFileInfo();
+            if (fileInput.files.length > 0) {
+                await loadAndParseWaypoints(fileInput.files[0]);
+            } else {
+                waypoints = [];
+                updateWaypointsList();
+            }
+        }
+
+        function handleDrop(e) {
+            const dt = e.dataTransfer;
+            const files = dt.files;
+            fileInput.files = files;
+            handleFileSelect();
+        }
+
+        function updateFileInfo() {
+            if (fileInput.files.length > 0) {
+                fileNameDisplay.textContent = "已选择: " + fileInput.files[0].name;
+                downloadBtn.disabled = false;
+            } else {
+                fileNameDisplay.textContent = "";
+                downloadBtn.disabled = true;
+            }
+        }
+        
+        async function loadAndParseWaypoints(file) {
+            try {
+                const text = await file.text();
+                const parser = new DOMParser();
+                const xmlDoc = parser.parseFromString(text, "text/xml");
+                
+                if (xmlDoc.getElementsByTagName('parsererror').length > 0) {
+                    console.error('XML parsing error');
+                    return;
+                }
+                
+                // Determine file type
+                const isGpx = xmlDoc.getElementsByTagName('gpx').length > 0;
+                const isTcx = xmlDoc.getElementsByTagName('TrainingCenterDatabase').length > 0;
+                
+                if (!isGpx && !isTcx) return;
+                
+                // 1. Extract Track Points for distance calculation
+                let trackPoints = [];
+                if (isGpx) {
+                    const rawPts = Array.from(xmlDoc.getElementsByTagName('trkpt'));
+                    trackPoints = rawPts.map(pt => ({
+                        lat: parseFloat(pt.getAttribute('lat')),
+                        lon: parseFloat(pt.getAttribute('lon'))
+                    }));
+                } else { // TCX
+                    const rawPts = Array.from(xmlDoc.getElementsByTagName('Trackpoint'));
+                    trackPoints = rawPts.map(pt => {
+                        const pos = pt.getElementsByTagName('Position')[0];
+                        if (!pos) return null;
+                        return {
+                            lat: parseFloat(pos.getElementsByTagName('LatitudeDegrees')[0].textContent),
+                            lon: parseFloat(pos.getElementsByTagName('LongitudeDegrees')[0].textContent)
+                        };
+                    }).filter(pt => pt !== null);
+                }
+                
+                if (trackPoints.length === 0) return;
+                
+                // Calculate cumulative distances for track points
+                // We'll store distances in a parallel array or add property
+                let accumulatedDist = 0;
+                trackPoints[0].dist = 0;
+                
+                for (let i = 0; i < trackPoints.length - 1; i++) {
+                    const d = getDistanceFromLatLonInKm(
+                        trackPoints[i].lat, trackPoints[i].lon,
+                        trackPoints[i+1].lat, trackPoints[i+1].lon
+                    );
+                    accumulatedDist += d;
+                    trackPoints[i+1].dist = accumulatedDist;
+                }
+                
+                
+                // 2. Extract Existing Waypoints
+                const newWaypoints = [];
+                
+                if (isGpx) {
+                    const wpts = Array.from(xmlDoc.getElementsByTagName('wpt'));
+                    wpts.forEach(wpt => {
+                        const lat = parseFloat(wpt.getAttribute('lat'));
+                        const lon = parseFloat(wpt.getAttribute('lon'));
+                        const nameTag = wpt.getElementsByTagName('name')[0];
+                        const name = nameTag ? nameTag.textContent : 'WayPoint';
+                        
+                        // Find closest track point distance
+                        const dist = findClosestDistance(lat, lon, trackPoints);
+                        newWaypoints.push({ id: Date.now() + Math.random(), distance: dist, name: name });
+                    });
+                } else { // TCX
+                    const coursePoints = Array.from(xmlDoc.getElementsByTagName('CoursePoint'));
+                    coursePoints.forEach(cp => {
+                        const nameTag = cp.getElementsByTagName('Name')[0];
+                        const name = nameTag ? nameTag.textContent : 'CoursePoint';
+                        
+                        const pos = cp.getElementsByTagName('Position')[0];
+                        if (pos) {
+                            const lat = parseFloat(pos.getElementsByTagName('LatitudeDegrees')[0].textContent);
+                            const lon = parseFloat(pos.getElementsByTagName('LongitudeDegrees')[0].textContent);
+                            
+                             // Find closest track point distance
+                            const dist = findClosestDistance(lat, lon, trackPoints);
+                             newWaypoints.push({ id: Date.now() + Math.random(), distance: dist, name: name });
+                        }
+                    });
+                }
+                
+                if (newWaypoints.length > 0) {
+                    // Ask user if they want to load existing waypoints? Or just load them by default.
+                    // User request implies "if exists, join the list".
+                    waypoints = newWaypoints;
+                    updateWaypointsList();
+                } else {
+                    // Reset if no waypoints found in new file
+                    waypoints = [];
+                    updateWaypointsList();
+                }
+                
+            } catch (e) {
+                console.error("Error parsing waypoints from file", e);
+            }
+        }
+        
+        function findClosestDistance(lat, lon, trackPoints) {
+            let minDiv = Infinity;
+            let closestDist = 0;
+            
+            // Simple linear search for closest point. Optimization possible (e.g. Quadtree) but likely unnecessary for typical track sizes < 20k points.
+            for (let i = 0; i < trackPoints.length; i++) {
+                // Approximate Euclidean distance is enough for finding the closest point index
+                // Or use haversine for accuracy
+                const d = getDistanceFromLatLonInKm(lat, lon, trackPoints[i].lat, trackPoints[i].lon);
+                if (d < minDiv) {
+                    minDiv = d;
+                    closestDist = trackPoints[i].dist;
+                }
+            }
+            return closestDist;
+        }
+
+        function addWaypoint() {
+            const distInput = document.getElementById('wpDistance');
+            const nameInput = document.getElementById('wpName');
+            const errorDiv = document.getElementById('addError');
+
+            const dist = parseFloat(distInput.value);
+            const name = nameInput.value.trim();
+
+            if (isNaN(dist) || dist < 0 || !name) {
+                errorDiv.style.display = 'block';
+                return;
+            }
+
+            errorDiv.style.display = 'none';
+
+            if (editingId) {
+                // Update existing
+                const index = waypoints.findIndex(wp => wp.id === editingId);
+                if (index !== -1) {
+                    waypoints[index].distance = dist;
+                    waypoints[index].name = name;
+                }
+                cancelEdit(); // Reset UI but keep data change
+            } else {
+                // Add new
+                waypoints.push({ id: Date.now(), distance: dist, name: name });
+            }
+            
+            updateWaypointsList();
+            
+            // 清空输入 (If not already cleared by cancelEdit)
+            if (!editingId) {
+                distInput.value = '';
+                nameInput.value = '';
+                distInput.focus();
+            }
+        }
+        
+        function updateWaypointsList() {
+            // 排序：按距离从小到大
+            waypoints.sort((a, b) => a.distance - b.distance);
+            renderWaypoints();
+        }
+
+        function removeWaypoint(id) {
+            if (editingId === id) {
+                cancelEdit();
+            }
+            waypoints = waypoints.filter(wp => wp.id !== id);
+            updateWaypointsList();
+        }
+
+        function editWaypoint(id) {
+            const wp = waypoints.find(w => w.id === id);
+            if (wp) {
+                document.getElementById('wpDistance').value = wp.distance;
+                document.getElementById('wpName').value = wp.name;
+                editingId = id;
+                
+                addBtn.innerText = '更新';
+                cancelBtn.style.display = 'inline-block';
+                
+                // Scroll to top or input area if needed (optional)
+            }
+        }
+        
+        function cancelEdit() {
+            editingId = null;
+            document.getElementById('wpDistance').value = '';
+            document.getElementById('wpName').value = '';
+            addBtn.innerText = '添加';
+            cancelBtn.style.display = 'none';
+        }
+
+        function renderWaypoints() {
+            const list = document.getElementById('waypointList');
+            const placeholder = document.getElementById('listPlaceholder');
+            
+            list.innerHTML = '';
+            
+            if (waypoints.length === 0) {
+                placeholder.style.display = 'block';
+                list.style.display = 'none';
+            } else {
+                placeholder.style.display = 'none';
+                list.style.display = 'block';
+                waypoints.forEach(wp => {
+                    const li = document.createElement('li');
+                    li.className = 'waypoint-item';
+                    
+                    // Highlight if currently editing
+                    if (wp.id === editingId) {
+                        li.style.borderColor = '#f0c541'; 
+                        li.style.background = '#fffbea';
+                    }
+                    
+                    li.innerHTML = `
+                        <div>
+                            <span class="waypoint-info">${wp.name}</span>
+                            <span class="waypoint-details">@ ${wp.distance.toFixed(2)} km</span>
+                        </div>
+                        <div>
+                            <button class="edit-btn" onclick="editWaypoint(${wp.id})">编辑</button>
+                            <button class="delete-btn" onclick="removeWaypoint(${wp.id})">删除</button>
+                        </div>
+                    `;
+                    list.appendChild(li);
+                });
+            }
+        }
+
+        function degreesToRadians(degrees) {
+            return degrees * Math.PI / 180;
+        }
+
+        function getDistanceFromLatLonInKm(lat1, lon1, lat2, lon2) {
+            const R = 6371; // 地球半径 (km)
+            const dLat = degreesToRadians(lat2 - lat1);
+            const dLon = degreesToRadians(lon2 - lon1);
+            const a = 
+                Math.sin(dLat/2) * Math.sin(dLat/2) +
+                Math.cos(degreesToRadians(lat1)) * Math.cos(degreesToRadians(lat2)) * 
+                Math.sin(dLon/2) * Math.sin(dLon/2); 
+            const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a)); 
+            return R * c;
+        }
+
+        function interpolate(start, end, fraction) {
+            return start + (end - start) * fraction;
+        }
+
+        function formatXml(xml) {
+            let formatted = '';
+            let pad = 0;
+            const indent = '  ';
+            
+            // Clean up existing whitespace between tags
+            xml = xml.replace(/>\s*</g, '><');
+            
+            // Split by tags
+            const tokens = xml.replace(/</g, '~::~<').split('~::~');
+            
+            for (let i = 0; i < tokens.length; i++) {
+                let token = tokens[i];
+                if (!token.trim()) continue;
+                
+                let isSingleLine = false;
+
+                // Check if this is an opening tag with content, followed immediately by closing tag
+                if (i < tokens.length - 1) {
+                    const closeAngleIndex = token.indexOf('>');
+                    if (token.indexOf('<') === 0 && 
+                        token.indexOf('</') !== 0 && 
+                        token.indexOf('/>') === -1 && 
+                        token.indexOf('?>') === -1 && 
+                        token.indexOf('<!') === -1 && 
+                        closeAngleIndex !== -1 && 
+                        closeAngleIndex < token.length - 1) {
+                        
+                        const tagContent = token.substring(1, closeAngleIndex);
+                        const tagName = tagContent.split(/\s+/)[0];
+                        const nextToken = tokens[i+1];
+                        if (nextToken.trim() === `</${tagName}>`) {
+                            isSingleLine = true;
+                        }
+                    }
+                }
+
+                if (isSingleLine) {
+                    formatted += indent.repeat(pad) + token + tokens[i+1] + '\n';
+                    i++;
+                } else {
+                    // Decrease indent for closing tags
+                    if (token.indexOf('</') === 0) {
+                        pad = Math.max(0, pad - 1);
+                    }
+                    
+                    formatted += indent.repeat(pad) + token + '\n';
+                    
+                    // Increase indent for opening tags (not self-closing, not processing instructions)
+                    if (token.indexOf('<') === 0 && 
+                        token.indexOf('</') !== 0 && 
+                        token.indexOf('/>') === -1 && 
+                        token.indexOf('?>') === -1 && 
+                        token.indexOf('<!') === -1) {
+                        pad++;
+                    }
+                }
+            }
+            
+            return formatted.trim();
+        }
+
+        async function fetchOSRMRoute(points) {
+            const CHUNK_SIZE = 80;
+            const newPoints = [];
+            
+            // Show progress
+            const loadingText = document.getElementById('loadingText');
+            
+            // Since we use the 'route' service, we treat input points as waypoints to visit.
+            // If the input is too sparse, this connects them via roads.
+            // If the input is dense/noisy, this still forces a path through them, which might loop if GPS drift is bad.
+            // For "HK100" style files (sparse planning points), 'route' is better than 'match'.
+            
+            // Processing in chunks
+            for (let i = 0; i < points.length - 1; i += CHUNK_SIZE) {
+                if (loadingText) loadingText.textContent = `正在优化轨迹... (${Math.round(i / points.length * 100)}%)`;
+                
+                // We overlap chunks to ensure connectivity: [0...80], [80...160]
+                // The point at index 80 is the End of chunk 1 and Start of chunk 2
+                let end = Math.min(i + CHUNK_SIZE, points.length - 1);
+                
+                // If this is the last chunk, go to the end
+                if (i + CHUNK_SIZE >= points.length - 1) {
+                    end = points.length - 1;
+                }
+                
+                const chunk = points.slice(i, end + 1);
+                if (chunk.length < 2) continue;
+
+                const coords = chunk.map(p => `${p.lon.toFixed(6)},${p.lat.toFixed(6)}`).join(';');
+                const url = `https://router.project-osrm.org/route/v1/foot/${coords}?overview=full&geometries=geojson`;
+
+                try {
+                    const response = await fetch(url);
+                    if (!response.ok) throw new Error('Network response was not ok');
+                    const data = await response.json();
+
+                    if (data.code === 'Ok' && data.routes && data.routes.length > 0) {
+                        const routeCoords = data.routes[0].geometry.coordinates;
+                        
+                        // routeCoords is [[lon, lat], [lon, lat]...]
+                        // Convert to our format
+                        const routePoints = routeCoords.map(c => ({
+                            lat: c[1],
+                            lon: c[0],
+                            // Time and elevation are lost in OSRM route unless we interpolate or fetch (OSRM doesn't provide ele)
+                            // We will handle elevation separately if needed (set to 0 or interpolate from original if possible)
+                            ele: 0
+                        }));
+
+                        // Avoid duplicating the connection point
+                        if (newPoints.length > 0) {
+                            // Check if the last point of previous chunk is same as first of this chunk
+                            // OSRM usually returns the start point.
+                            // We can skip the first point if it's identical to the last added point
+                            routePoints.shift();
+                        }
+                        
+                        newPoints.push(...routePoints);
+                    } else {
+                        // If OSRM fails to route (e.g. no road), fallback to straight line for this chunk?
+                        // Or just append original points? 
+                        // Let's append original chunk points as fallback line
+                        console.warn('OSRM routing failed for chunk, falling back to straight line');
+                        const fallback = chunk.slice(newPoints.length > 0 ? 1 : 0);
+                        newPoints.push(...fallback);
+                    }
+                } catch (e) {
+                    console.error('OSRM fetch error:', e);
+                    // Fallback
+                    const fallback = chunk.slice(newPoints.length > 0 ? 1 : 0);
+                    newPoints.push(...fallback);
+                }
+                
+                // Rate limiting protection
+                await new Promise(r => setTimeout(r, 200));
+            }
+            
+            return newPoints;
+        }
+
+        async function processAndDownload() {
+            if (!fileInput.files.length) {
+                alert('请先选择一个 GPX 或 TCX 文件');
+                return;
+            }
+            
+            const useOSRM = document.getElementById('useOSRM').checked;
+            const loadingOverlay = document.getElementById('loadingOverlay');
+            loadingOverlay.style.display = 'flex';
+
+            try {
+                const file = fileInput.files[0];
+                const text = await file.text();
+                
+                const parser = new DOMParser();
+                const xmlDoc = parser.parseFromString(text, "text/xml");
+                
+                if (xmlDoc.getElementsByTagName('parsererror').length > 0) {
+                    alert('解析文件失败，请检查文件格式。');
+                    loadingOverlay.style.display = 'none';
+                    return;
+                }
+
+                // Determine file type
+                const isGpx = xmlDoc.getElementsByTagName('gpx').length > 0;
+                const isTcx = xmlDoc.getElementsByTagName('TrainingCenterDatabase').length > 0;
+
+                if (!isGpx && !isTcx) {
+                    alert('不支持的文件格式。请上传 GPX 或 TCX 文件。');
+                    loadingOverlay.style.display = 'none';
+                    return;
+                }
+
+                // Extract track points
+                let trkpts = [];
+                if (isGpx) {
+                    const rawPts = Array.from(xmlDoc.getElementsByTagName('trkpt'));
+                    trkpts = rawPts.map(pt => ({
+                        lat: parseFloat(pt.getAttribute('lat')),
+                        lon: parseFloat(pt.getAttribute('lon')),
+                        ele: pt.getElementsByTagName('ele')[0] ? parseFloat(pt.getElementsByTagName('ele')[0].textContent) : 0,
+                        time: pt.getElementsByTagName('time')[0] ? new Date(pt.getElementsByTagName('time')[0].textContent).getTime() : 0,
+                        obj: pt 
+                    }));
+                } else if (isTcx) {
+                    const rawPts = Array.from(xmlDoc.getElementsByTagName('Trackpoint'));
+                    trkpts = rawPts.map(pt => {
+                        const pos = pt.getElementsByTagName('Position')[0];
+                        if (!pos) return null;
+                        const lat = parseFloat(pos.getElementsByTagName('LatitudeDegrees')[0].textContent);
+                        const lon = parseFloat(pos.getElementsByTagName('LongitudeDegrees')[0].textContent);
+                        const timeTag = pt.getElementsByTagName('Time')[0];
+                        const time = timeTag ? new Date(timeTag.textContent).getTime() : 0;
+                        const eleTag = pt.getElementsByTagName('AltitudeMeters')[0];
+                        const ele = eleTag ? parseFloat(eleTag.textContent) : 0;
+                        return {
+                            lat: lat,
+                            lon: lon,
+                            time: time,
+                            ele: ele,
+                            obj: pt
+                        };
+                    }).filter(pt => pt !== null);
+                }
+                
+                if (trkpts.length === 0) {
+                    alert('文件中没有找到轨迹点');
+                    loadingOverlay.style.display = 'none';
+                    return;
+                }
+                
+                // Apply OSRM optimization if checked
+                if (useOSRM) {
+                    const optimizedPoints = await fetchOSRMRoute(trkpts);
+                    // OSRM returns 2D coords. We lose elevation and time. 
+                    // However, for pure routing display, lat/lon is most important.
+                    // If we want to keep time/ele, we need complex mapping or interpolation.
+                    // For now, we use the optimized path with 0 ele/time or interpolated?
+                    // Let's use the optimized points as the new "Track".
+                    if (optimizedPoints.length > 0) {
+                        trkpts = optimizedPoints;
+                    }
+                }
+
+                let pendingWaypoints = [...waypoints];
+                let totalDistance = 0;
+                
+                const newWaypoints = []; // Stores formatted objects or elements: {lat, lon, name, time?}
+
+                // Check start point (0 km)
+
+             while (pendingWaypoints.length > 0 && pendingWaypoints[0].distance <= 0) {
+                 const wp = pendingWaypoints.shift();
+                 const firstPt = trkpts[0];
+                 newWaypoints.push({
+                     lat: firstPt.lat,
+                     lon: firstPt.lon,
+                     name: wp.name,
+                     distance: wp.distance,
+                     time: firstPt.time || 0
+                 });
+             }
+
+            for (let i = 0; i < trkpts.length - 1; i++) {
+                if (pendingWaypoints.length === 0) break;
+
+                const curr = trkpts[i];
+                const next = trkpts[i+1];
+                
+                const segmentDist = getDistanceFromLatLonInKm(curr.lat, curr.lon, next.lat, next.lon);
+                
+                while (pendingWaypoints.length > 0) {
+                    const targetDist = pendingWaypoints[0].distance;
+                    
+                    if (targetDist >= totalDistance && targetDist <= totalDistance + segmentDist) {
+                        const distIntoSegment = targetDist - totalDistance;
+                        let fraction = 0;
+                        if (segmentDist > 0) {
+                            fraction = distIntoSegment / segmentDist;
+                        }
+
+                        const newLat = interpolate(curr.lat, next.lat, fraction);
+                        const newLon = interpolate(curr.lon, next.lon, fraction);
+                        
+                        // Interpolate time for TCX
+                        let newTime = 0;
+                        if (isTcx && curr.time && next.time) {
+                            newTime = interpolate(curr.time, next.time, fraction);
+                        }
+
+                        newWaypoints.push({
+                            lat: newLat,
+                            lon: newLon,
+                            name: pendingWaypoints[0].name,
+                            distance: targetDist,
+                            time: newTime
+                        });
+                        
+                        pendingWaypoints.shift();
+                    } else if (targetDist < totalDistance) {
+                         pendingWaypoints.shift();
+                    } else {
+                        break;
+                    }
+                }
+                
+                totalDistance += segmentDist;
+            }
+
+            // Insert into XML
+            if (isGpx) {
+                const gpxNode = xmlDoc.getElementsByTagName('gpx')[0];
+                
+                // Remove existing waypoints to avoid duplicates
+                const existingWpts = Array.from(xmlDoc.getElementsByTagName('wpt'));
+                existingWpts.forEach(node => node.parentNode.removeChild(node));
+
+                // Remove time tags from trkpts as requested
+                const allTrkpts = Array.from(xmlDoc.getElementsByTagName('trkpt'));
+                allTrkpts.forEach(pt => {
+                    const timeNode = pt.getElementsByTagName('time')[0];
+                    if (timeNode) {
+                        pt.removeChild(timeNode);
+                    }
+                });
+
+                const trkNode = xmlDoc.getElementsByTagName('trk')[0];
+                
+                newWaypoints.forEach(wp => {
+                    const wpt = xmlDoc.createElement('wpt');
+                    wpt.setAttribute('lat', wp.lat.toFixed(7));
+                    wpt.setAttribute('lon', wp.lon.toFixed(7));
+                    
+                    const nameTag = xmlDoc.createElement('name');
+                    nameTag.textContent = wp.name;
+                    wpt.appendChild(nameTag);
+                    
+                    const eleTag = xmlDoc.createElement('ele');
+                    eleTag.textContent = "0.0";
+                    wpt.appendChild(eleTag);
+                    
+                    const typeTag = xmlDoc.createElement('type');
+                    typeTag.textContent = "GENERIC";
+                    wpt.appendChild(typeTag);
+                    
+                    if (trkNode) {
+                        gpxNode.insertBefore(wpt, trkNode);
+                    } else {
+                        gpxNode.appendChild(wpt);
+                    }
+                });
+            } else if (isTcx) {
+                // For TCX, we add CoursePoint elements
+                // Usually inside <Course> tag
+                const courses = xmlDoc.getElementsByTagName('Course');
+                let courseNode;
+                if (courses.length > 0) {
+                    courseNode = courses[0];
+                    
+                    // Remove existing CoursePoints to avoid duplicates
+                    const existingCps = Array.from(courseNode.getElementsByTagName('CoursePoint'));
+                    existingCps.forEach(node => node.parentNode.removeChild(node));
+                } else {
+                    alert("TCX 文件必须包含 <Course> 元素才能添加航点。如果是 Activity 记录，请先转换为路线(Course)。");
+                    return;
+                }
+
+                newWaypoints.forEach(wp => {
+                    const cp = xmlDoc.createElement('CoursePoint');
+                    
+                    const nameTag = xmlDoc.createElement('Name');
+                    nameTag.textContent = wp.name;
+                    cp.appendChild(nameTag);
+                    
+                    const timeTag = xmlDoc.createElement('Time');
+                    // Format time to ISO string
+                    const dateStr = wp.time ? new Date(wp.time).toISOString() : new Date().toISOString();
+                    timeTag.textContent = dateStr;
+                    cp.appendChild(timeTag);
+                    
+                    const posTag = xmlDoc.createElement('Position');
+                    const latTag = xmlDoc.createElement('LatitudeDegrees');
+                    latTag.textContent = wp.lat.toFixed(7);
+                    const lonTag = xmlDoc.createElement('LongitudeDegrees');
+                    lonTag.textContent = wp.lon.toFixed(7);
+                    posTag.appendChild(latTag);
+                    posTag.appendChild(lonTag);
+                    cp.appendChild(posTag);
+                    
+                    const typeTag = xmlDoc.createElement('PointType');
+                    typeTag.textContent = 'Generic'; // or 'Food', 'Water', etc. if we want to be fancy later
+                    cp.appendChild(typeTag);
+                    
+                    const notesTag = xmlDoc.createElement('Notes');
+                    notesTag.textContent = `${wp.name} @ ${wp.distance.toFixed(2)}km`;
+                    cp.appendChild(notesTag);
+
+                    courseNode.appendChild(cp);
+                });
+            }
+
+            const serializer = new XMLSerializer();
+            const rawXmlStr = serializer.serializeToString(xmlDoc);
+            // Clean up unwanted xmlns="" attributes and format
+            const newXmlStr = formatXml(rawXmlStr).replace(/ xmlns=""/g, '');
+            
+            const blob = new Blob([newXmlStr], {type: isGpx ? "application/gpx+xml" : "application/vnd.garmin.tcx+xml"});
+            const url = URL.createObjectURL(blob);
+            
+            const a = document.createElement('a');
+            a.href = url;
+            const ext = isGpx ? '.gpx' : '.tcx';
+            a.download = file.name.replace(/\.(gpx|tcx)$/i, '_waypoints' + ext);
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+            
+            loadingOverlay.style.display = 'none';
+
+            } catch (err) {
+                console.error(err);
+                alert('处理过程中发生错误: ' + err.message);
+                loadingOverlay.style.display = 'none';
+            }
+        }
+    </script>
+</body>
+</html>
