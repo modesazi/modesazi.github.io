@@ -622,6 +622,52 @@
             });
         }
 
+        function populateWaypoints(waypoints, trackPoints) {
+            const matchedWaypoints = [];
+            
+            waypoints.forEach(wp => {
+                let minDist = Infinity;
+                let bestPoint = null;
+                
+                // 为每个航点寻找最近的轨迹点
+                for (const p of trackPoints) {
+                    // 简单的欧几里得距离平方，用于比较最近点
+                    const d = Math.pow(p.lat - wp.lat, 2) + Math.pow(p.lon - wp.lon, 2);
+                    if (d < minDist) {
+                        minDist = d;
+                        bestPoint = p;
+                    }
+                }
+                
+                // 阈值判断：如果最近点距离过远（约 200米以上），则忽略该航点
+                // 1度 约等于 111km，0.002度 约为 222m。pow(0.002, 2) = 0.000004
+                if (bestPoint && minDist < 0.000004) {
+                    matchedWaypoints.push({
+                        distance: bestPoint.distance,
+                        name: wp.name
+                    });
+                }
+            });
+
+            if (matchedWaypoints.length > 0) {
+                // 按距离排序
+                matchedWaypoints.sort((a, b) => a.distance - b.distance);
+                
+                // 过滤掉起点（0km）和非常接近的重复点
+                const filtered = matchedWaypoints.filter((wp, index) => {
+                    if (wp.distance < 0.1) return false; // 忽略起点的航点
+                    if (index > 0 && (wp.distance - matchedWaypoints[index-1].distance < 0.1)) return false; // 忽略重复点
+                    return true;
+                });
+
+                if (filtered.length > 0) {
+                    const locStr = filtered.map(wp => `${wp.distance.toFixed(1)}(0)`).join(', ');
+                    document.getElementById('cpLocations').value = locStr;
+                    document.getElementById('useCpSegments').checked = true;
+                }
+            }
+        }
+
         async function handleFile(file) {
             const ext = file.name.split('.').pop().toLowerCase();
             
@@ -631,8 +677,13 @@
             }
 
             try {
-                const data = ext === 'gpx' ? await parseGPX(file) : await parseTCX(file);
-                trackData = processTrackData(data);
+                const parsed = ext === 'gpx' ? await parseGPX(file) : await parseTCX(file);
+                trackData = processTrackData(parsed.points);
+                
+                // 自动填充航点信息
+                if (parsed.waypoints && parsed.waypoints.length > 0) {
+                    populateWaypoints(parsed.waypoints, trackData.points);
+                }
                 
                 document.getElementById('fileName').textContent = file.name;
                 document.getElementById('totalDistance').textContent = trackData.totalDistance.toFixed(2) + ' km';
@@ -680,8 +731,25 @@
                     });
                 }
             }
+
+            const waypoints = [];
+            const wptNodes = xml.getElementsByTagName('wpt');
+            for (let i = 0; i < wptNodes.length; i++) {
+                const wpt = wptNodes[i];
+                const lat = parseFloat(wpt.getAttribute('lat'));
+                const lon = parseFloat(wpt.getAttribute('lon'));
+                const nameNode = wpt.getElementsByTagName('name')[0];
+                
+                if (!isNaN(lat) && !isNaN(lon)) {
+                    waypoints.push({
+                        lat: lat,
+                        lon: lon,
+                        name: nameNode ? nameNode.textContent : `CP${waypoints.length + 1}`
+                    });
+                }
+            }
             
-            return data;
+            return { points: data, waypoints: waypoints };
         }
 
         async function parseTCX(file) {
@@ -708,8 +776,25 @@
                     });
                 }
             }
+
+            const waypoints = [];
+            const coursePoints = xml.getElementsByTagName('CoursePoint');
+            for (let i = 0; i < coursePoints.length; i++) {
+                const cp = coursePoints[i];
+                const latNode = cp.getElementsByTagName('LatitudeDegrees')[0];
+                const lonNode = cp.getElementsByTagName('LongitudeDegrees')[0];
+                const nameNode = cp.getElementsByTagName('Name')[0];
+                
+                if (latNode && lonNode) {
+                    waypoints.push({
+                        lat: parseFloat(latNode.textContent),
+                        lon: parseFloat(lonNode.textContent),
+                        name: nameNode ? nameNode.textContent : `CP${waypoints.length + 1}`
+                    });
+                }
+            }
             
-            return data;
+            return { points: data, waypoints: waypoints };
         }
 
         function haversine(lat1, lon1, lat2, lon2) {
