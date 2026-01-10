@@ -914,8 +914,14 @@
             let cumulativeDistance = 0, cumulativeAscent = 0, cumulativeDescent = 0, cumulativeTime = 0;
             
             segments.forEach(seg => {
-                const effortDistance = cumulativeDistance + cumulativeAscent / 100 + 0.3 * cumulativeDescent / 100;
-                const fatiguePace = calculateFatigueAdjustment(itraScore, effortDistance, cumulativeTime / 3600);
+                // Adjust effort distance based on "Best case" from user input: 100m ascent = 450m flat
+                // 100m = 0.45km => coefficient 0.0045
+                const effortDistance = cumulativeDistance + (cumulativeAscent * 0.0045) + (cumulativeDescent * 0.003);
+                
+                // New Strategy: 8% slowdown per double distance
+                // We pass effortDistance to the new simple fatigue calculator
+                const fatiguePace = calculateFatigueAdjustment(effortDistance);
+                
                 const gradeAdjust = calculateGradeAdjustment(seg.grade, coeffs);
                 const elevationChangeAdjust = calculateElevationChangeAdjustment(seg.ascent, seg.descent, seg.distance);
                 
@@ -1124,14 +1130,12 @@
             return smoothedGrades;
         }
 
-        function calculateFatigueAdjustment(itraScore, cumulativeEffort, cumulativeTime) {
-            const phi = 0.15 * Math.pow(1 - itraScore / 1000, 2.5);
-            
-            const basePace = 60 / (0.012 * itraScore + 4);
-            
-            const fatigueMultiplier = 1 + phi * (cumulativeEffort / 100) + 0.015 * cumulativeTime;
-            
-            return basePace * fatigueMultiplier;
+        function calculateFatigueAdjustment(dist) {
+            // Strategy: Interval pace slows down by 8% for every double distance
+            // Formula: Factor = dist ^ log2(1.08)
+            // We use Math.max(dist, 1) to avoid issues with distance < 1 or 0
+            const k = Math.log(1.08) / Math.LN2;
+            return Math.pow(Math.max(dist, 1), k);
         }
 
         function calculateElevationChangeAdjustment(ascent, descent, distanceKm) {
