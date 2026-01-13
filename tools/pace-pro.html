@@ -483,6 +483,21 @@
                                 <input type="number" id="downhillCoeff" step="0.1" value="1.5" min="0" max="5">
                             </div>
                         </div>
+
+                        <div class="input-group" style="margin-top: 15px; padding-top: 15px; border-top: 1px dashed #eee;">
+                            <label>⚖️ 前后程速率分配</label>
+                            <div style="display: flex; justify-content: space-between; margin-bottom: 5px; font-size: 0.8rem; color: #666;">
+                                <span>前快后慢 (激进)</span>
+                                <span>前慢后快 (保守)</span>
+                            </div>
+                            <input type="range" id="pacingRatio" min="-20" max="20" value="0" step="1" style="width: 100%; accent-color: #667eea;">
+                            <div style="text-align: center; font-size: 0.85rem; color: #667eea; font-weight: bold; margin-top: 5px;">
+                                <span id="pacingRatioValue">0% (均衡配速)</span>
+                            </div>
+                            <div style="font-size: 0.8rem; color: #999; text-align: center; margin-top: 2px;">
+                                调整初始配速相对于平均配速的快慢
+                            </div>
+                        </div>
                     </div>
 
                     <button class="btn" id="calculateBtn" disabled>计算配速</button>
@@ -578,6 +593,23 @@
         const fileInfo = document.getElementById('fileInfo');
         const resultsSection = document.getElementById('resultsSection');
         const customCoeffs = document.getElementById('customCoeffs');
+
+        // Pacing Ratio Slider
+        const pacingRatioSlider = document.getElementById('pacingRatio');
+        const pacingRatioValue = document.getElementById('pacingRatioValue');
+        
+        pacingRatioSlider.addEventListener('input', (e) => {
+            const val = parseInt(e.target.value);
+            let text = '';
+            if (val === 0) {
+                text = '0% (均衡配速)';
+            } else if (val > 0) {
+                text = `+${val}% (起跑偏慢)`;
+            } else {
+                text = `${val}% (起跑偏快)`;
+            }
+            pacingRatioValue.textContent = text;
+        });
 
         uploadArea.addEventListener('click', () => fileInput.click());
         
@@ -1041,6 +1073,7 @@
             }
 
             let cumulativeDistance = 0, cumulativeAscent = 0, cumulativeDescent = 0, cumulativeTime = 0;
+            const pacingRatio = parseInt(document.getElementById('pacingRatio').value) || 0;
             
             segments.forEach(seg => {
                 // Adjust effort distance based on "Best case" from user input: 100m ascent = 450m flat
@@ -1050,11 +1083,16 @@
                 // New Strategy: 8% slowdown per double distance
                 // We pass effortDistance to the new simple fatigue calculator
                 const fatiguePace = calculateFatigueAdjustment(effortDistance);
+
+                // Strategy Slider Adjustment
+                const segmentMidDist = cumulativeDistance + (seg.distance / 2);
+                const progress = trackData.totalDistance > 0 ? segmentMidDist / trackData.totalDistance : 0;
+                const strategyPaceAdjust = 1 + (pacingRatio / 100.0) * (1 - 2 * progress);
                 
                 const gradeAdjust = calculateGradeAdjustment(seg.grade, coeffs);
                 const elevationChangeAdjust = calculateElevationChangeAdjustment(seg.ascent, seg.descent, seg.distance);
                 
-                const adjustedPace = fatiguePace * gradeAdjust * elevationChangeAdjust;
+                const adjustedPace = fatiguePace * gradeAdjust * elevationChangeAdjust * strategyPaceAdjust;
                 const segmentTime = seg.distance * adjustedPace * 60;
                 
                 seg.paceSeconds = adjustedPace * 60;
