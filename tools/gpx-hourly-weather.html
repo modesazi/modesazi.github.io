@@ -1,0 +1,782 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GPX 逐小时气象采样</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
+            min-height: 100vh;
+            padding: 24px;
+            color: #1a1a1a;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: #ffffff;
+            border-radius: 18px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.2);
+            overflow: hidden;
+        }
+
+        .header {
+            padding: 28px 32px;
+            background: linear-gradient(135deg, #4facfe 0%, #00c6ff 100%);
+            color: #ffffff;
+        }
+
+        .header h1 {
+            font-size: 2.2em;
+            margin-bottom: 8px;
+        }
+
+        .header p {
+            opacity: 0.9;
+        }
+
+        .content {
+            padding: 28px 32px 36px;
+            display: grid;
+            grid-template-columns: 1fr;
+            gap: 20px;
+        }
+
+        .card {
+            border: 1px solid #e6e6e6;
+            border-radius: 14px;
+            padding: 20px;
+            background: #ffffff;
+        }
+
+        .card h2 {
+            font-size: 1.2em;
+            margin-bottom: 14px;
+            color: #2d2d2d;
+        }
+
+        .upload-area {
+            border: 2px dashed #4facfe;
+            border-radius: 12px;
+            padding: 28px;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .upload-area:hover {
+            background: #f5fbff;
+            border-color: #00c6ff;
+        }
+
+        .upload-area.dragover {
+            background: #e9f7ff;
+            border-color: #00c6ff;
+            transform: scale(1.01);
+        }
+
+        .form-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+            gap: 14px;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 6px;
+            font-weight: 600;
+            color: #4a4a4a;
+        }
+
+        input[type="datetime-local"] {
+            width: 100%;
+            padding: 10px 12px;
+            border-radius: 8px;
+            border: 1px solid #d9d9d9;
+            font-size: 0.95em;
+        }
+
+        .btn {
+            padding: 12px 16px;
+            border: none;
+            border-radius: 10px;
+            background: linear-gradient(135deg, #4facfe 0%, #00c6ff 100%);
+            color: #ffffff;
+            font-weight: 600;
+            font-size: 1em;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            width: 100%;
+        }
+
+        .btn:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+        }
+
+        .btn:hover:not(:disabled) {
+            transform: translateY(-1px);
+            box-shadow: 0 8px 18px rgba(0, 198, 255, 0.35);
+        }
+
+        .status {
+            margin-top: 10px;
+            color: #1f6f8b;
+            font-size: 0.95em;
+        }
+
+        .chart-wrapper {
+            width: 100%;
+            overflow-x: auto;
+        }
+
+        #weatherChart {
+            width: 100%;
+            min-height: 320px;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 0.9em;
+        }
+
+        th, td {
+            padding: 10px 8px;
+            border-bottom: 1px solid #e6e6e6;
+            text-align: left;
+        }
+
+        th {
+            background: #f5fbff;
+        }
+
+        .note {
+            color: #6b6b6b;
+            font-size: 0.85em;
+            margin-top: 8px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🌤️ GPX 逐小时气象采样</h1>
+            <p>读取 GPX 路线并按匀速逐小时采样，调用 Open-Meteo 获取天气、气温、风力、风向。</p>
+        </div>
+        <div class="content">
+            <div class="card">
+                <h2>1. 上传 GPX 文件</h2>
+                <div id="uploadArea" class="upload-area">
+                    <div style="font-size: 2em;">📤</div>
+                    <p style="margin-top: 8px;">拖拽 GPX 文件至此或点击选择</p>
+                    <p style="margin-top: 6px; color: #6b6b6b; font-size: 0.9em;">仅支持 .gpx</p>
+                </div>
+                <input id="fileInput" type="file" accept=".gpx" style="display: none;">
+                <div id="fileInfo" class="status"></div>
+            </div>
+
+            <div class="card">
+                <h2>2. 设置时间范围</h2>
+                <div class="form-grid">
+                    <div>
+                        <label for="startTime">起始时间</label>
+                        <input id="startTime" type="datetime-local">
+                    </div>
+                    <div>
+                        <div style="display: flex; justify-content: space-between; align-items: center; gap: 8px;">
+                            <label for="endTime" id="endLabel">结束时间</label>
+                            <label style="font-weight: 500; color: #4a4a4a; display: flex; align-items: center; gap: 6px;">
+                                <input type="checkbox" id="useDuration" style="transform: translateY(1px);">
+                                完赛时长
+                            </label>
+                        </div>
+                        <input id="endTime" type="datetime-local">
+                        <input id="durationHours" type="number" min="0" step="0.1" placeholder="完赛时长（小时）" style="margin-top: 8px; display: none;">
+                    </div>
+                </div>
+                <div class="note">采样规则：包含 start；按整点逐小时采样；若 end 非整点则额外包含 end。</div>
+            </div>
+
+            <div class="card">
+                <h2>3. 生成结果</h2>
+                <button id="generateBtn" class="btn" disabled>生成逐小时气象采样</button>
+                <button id="exportBtn" class="btn" style="margin-top: 10px;" disabled>导出表格 CSV</button>
+                <div id="status" class="status"></div>
+            </div>
+
+            <div class="card">
+                <h2>4. 绘图与结果表</h2>
+                <div class="chart-wrapper">
+                    <canvas id="weatherChart"></canvas>
+                </div>
+                <div id="tableWrapper" style="margin-top: 16px; overflow-x: auto;"></div>
+                <div class="note">气温单位：°C，风力单位：km/h，风向单位：°（0-360）。</div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const uploadArea = document.getElementById("uploadArea")
+        const fileInput = document.getElementById("fileInput")
+        const fileInfo = document.getElementById("fileInfo")
+        const startTimeInput = document.getElementById("startTime")
+        const endTimeInput = document.getElementById("endTime")
+        const useDurationInput = document.getElementById("useDuration")
+        const durationHoursInput = document.getElementById("durationHours")
+        const endLabel = document.getElementById("endLabel")
+        const generateBtn = document.getElementById("generateBtn")
+        const exportBtn = document.getElementById("exportBtn")
+        const statusEl = document.getElementById("status")
+        const tableWrapper = document.getElementById("tableWrapper")
+        const weatherChartCanvas = document.getElementById("weatherChart")
+
+        let gpxData = null
+        let chartInstance = null
+        let lastSamples = []
+        let gpxFileName = "gpx"
+        let lastRange = { start: null, end: null }
+
+        const weatherCodeMap = {
+            0: "晴朗",
+            1: "大致晴朗",
+            2: "局部多云",
+            3: "阴",
+            45: "雾",
+            48: "雾凇",
+            51: "毛毛雨",
+            53: "中等毛毛雨",
+            55: "浓毛毛雨",
+            56: "轻微冻雨",
+            57: "冻雨",
+            61: "小雨",
+            63: "中雨",
+            65: "大雨",
+            66: "轻微冻雨",
+            67: "冻雨",
+            71: "小雪",
+            73: "中雪",
+            75: "大雪",
+            77: "雪粒",
+            80: "阵雨",
+            81: "中阵雨",
+            82: "强阵雨",
+            85: "阵雪",
+            86: "强阵雪",
+            95: "雷暴",
+            96: "雷暴伴小冰雹",
+            99: "雷暴伴大冰雹"
+        }
+
+        const weatherCache = new Map()
+
+        function toLocalDatetimeValue(date) {
+            const offset = date.getTimezoneOffset() * 60000
+            return new Date(date.getTime() - offset).toISOString().slice(0, 16)
+        }
+
+        function toLocalDateString(date) {
+            const offset = date.getTimezoneOffset() * 60000
+            return new Date(date.getTime() - offset).toISOString().slice(0, 10)
+        }
+
+        function nextFullHour(date = new Date()) {
+            const next = new Date(date)
+            next.setMinutes(0, 0, 0)
+            next.setHours(next.getHours() + 1)
+            return next
+        }
+
+        function parseGpx(text) {
+            const parser = new DOMParser()
+            const xml = parser.parseFromString(text, "application/xml")
+            let points = Array.from(xml.getElementsByTagName("trkpt"))
+            if (points.length === 0) {
+                points = Array.from(xml.getElementsByTagName("rtept"))
+            }
+            if (points.length === 0) {
+                return null
+            }
+
+            const result = []
+            for (const pt of points) {
+                const lat = parseFloat(pt.getAttribute("lat"))
+                const lon = parseFloat(pt.getAttribute("lon"))
+                const timeNode = pt.getElementsByTagName("time")[0]
+                const time = timeNode ? new Date(timeNode.textContent) : null
+                if (Number.isFinite(lat) && Number.isFinite(lon)) {
+                    result.push({ lat, lon, time })
+                }
+            }
+
+            if (result.length < 2) {
+                return null
+            }
+
+            const distances = [0]
+            let total = 0
+            for (let i = 1; i < result.length; i++) {
+                total += haversine(result[i - 1], result[i])
+                distances.push(total)
+            }
+
+            return {
+                points: result,
+                distances,
+                totalDistance: total
+            }
+        }
+
+        function haversine(a, b) {
+            const R = 6371000
+            const toRad = v => v * Math.PI / 180
+            const dLat = toRad(b.lat - a.lat)
+            const dLon = toRad(b.lon - a.lon)
+            const lat1 = toRad(a.lat)
+            const lat2 = toRad(b.lat)
+            const sin1 = Math.sin(dLat / 2)
+            const sin2 = Math.sin(dLon / 2)
+            const h = sin1 * sin1 + Math.cos(lat1) * Math.cos(lat2) * sin2 * sin2
+            const c = 2 * Math.atan2(Math.sqrt(h), Math.sqrt(1 - h))
+            return R * c
+        }
+
+        function generateSampleTimes(start, end) {
+            const times = [new Date(start)]
+            const startCopy = new Date(start)
+            const nextHour = new Date(startCopy)
+            nextHour.setMinutes(0, 0, 0)
+            if (startCopy.getMinutes() !== 0 || startCopy.getSeconds() !== 0 || startCopy.getMilliseconds() !== 0) {
+                nextHour.setHours(nextHour.getHours() + 1)
+            } else {
+                nextHour.setHours(nextHour.getHours() + 1)
+            }
+
+            let cursor = nextHour
+            while (cursor.getTime() <= end.getTime()) {
+                times.push(new Date(cursor))
+                cursor = new Date(cursor.getTime() + 3600000)
+            }
+
+            const last = times[times.length - 1]
+            if (last.getTime() !== end.getTime()) {
+                times.push(new Date(end))
+            }
+            return times
+        }
+
+        function interpolateByDistance(gpx, targetDistance, startIndex) {
+            const distances = gpx.distances
+            const points = gpx.points
+            let i = startIndex
+            while (i < distances.length - 2 && distances[i + 1] < targetDistance) {
+                i += 1
+            }
+            const d1 = distances[i]
+            const d2 = distances[i + 1]
+            const ratio = d2 === d1 ? 0 : (targetDistance - d1) / (d2 - d1)
+            const p1 = points[i]
+            const p2 = points[i + 1]
+            const lat = p1.lat + (p2.lat - p1.lat) * ratio
+            const lon = p1.lon + (p2.lon - p1.lon) * ratio
+            return { lat, lon, index: i }
+        }
+
+        function roundCoord(value, decimals = 3) {
+            const factor = Math.pow(10, decimals)
+            return Math.round(value * factor) / factor
+        }
+
+        async function fetchWeather(lat, lon, startDate, endDate) {
+            const key = `${lat.toFixed(3)},${lon.toFixed(3)}`
+            if (weatherCache.has(key)) {
+                return weatherCache.get(key)
+            }
+            const url = new URL("https://api.open-meteo.com/v1/forecast")
+            url.searchParams.set("latitude", lat)
+            url.searchParams.set("longitude", lon)
+            url.searchParams.set("hourly", "weathercode,temperature_2m,windspeed_10m,winddirection_10m")
+            url.searchParams.set("timezone", "auto")
+            url.searchParams.set("start_date", startDate)
+            url.searchParams.set("end_date", endDate)
+            const response = await fetch(url.toString())
+            if (!response.ok) {
+                throw new Error("无法获取天气数据")
+            }
+            const data = await response.json()
+            weatherCache.set(key, data)
+            return data
+        }
+
+        function closestHourIndex(times, target) {
+            let closestIndex = 0
+            let closestDiff = Infinity
+            for (let i = 0; i < times.length; i++) {
+                const diff = Math.abs(new Date(times[i]).getTime() - target.getTime())
+                if (diff < closestDiff) {
+                    closestDiff = diff
+                    closestIndex = i
+                }
+            }
+            return closestIndex
+        }
+
+        function windDirectionText(deg) {
+            if (!Number.isFinite(deg)) {
+                return "-"
+            }
+            const directions = [
+                "北风",
+                "北偏东",
+                "东北风",
+                "东偏北",
+                "东风",
+                "东偏南",
+                "东南风",
+                "南偏东",
+                "南风",
+                "南偏西",
+                "西南风",
+                "西偏南",
+                "西风",
+                "西偏北",
+                "西北风",
+                "北偏西"
+            ]
+            const index = Math.round(((deg % 360) + 360) % 360 / 22.5) % 16
+            return directions[index]
+        }
+
+        function renderChart(samples) {
+            const labels = samples.map(item => item.timeLabel)
+            const temperature = samples.map(item => item.temperature)
+            const windSpeed = samples.map(item => item.windSpeed)
+            const weatherText = samples.map(item => item.weather)
+
+            if (chartInstance) {
+                chartInstance.destroy()
+            }
+
+            chartInstance = new Chart(weatherChartCanvas.getContext("2d"), {
+                type: "line",
+                data: {
+                    labels,
+                    datasets: [
+                        {
+                            label: "气温 (°C)",
+                            data: temperature,
+                            borderColor: "#ffb347",
+                            backgroundColor: "rgba(255, 179, 71, 0.2)",
+                            tension: 0.3,
+                            yAxisID: "yTemp"
+                        },
+                        {
+                            label: "风力 (km/h)",
+                            data: windSpeed,
+                            borderColor: "#4facfe",
+                            backgroundColor: "rgba(79, 172, 254, 0.2)",
+                            tension: 0.3,
+                            yAxisID: "y"
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    interaction: {
+                        mode: "index",
+                        intersect: false
+                    },
+                    scales: {
+                        y: {
+                            position: "left",
+                            title: {
+                                display: true,
+                                text: "风力 (km/h)"
+                            }
+                        },
+                        yTemp: {
+                            position: "left",
+                            offset: true,
+                            title: {
+                                display: true,
+                                text: "气温 (°C)"
+                            },
+                            grid: {
+                                drawOnChartArea: false
+                            }
+                        }
+                    },
+                    plugins: {
+                        tooltip: {
+                            callbacks: {
+                                afterBody: context => {
+                                    const index = context[0].dataIndex
+                                    return `天气: ${weatherText[index]}`
+                                }
+                            }
+                        }
+                    }
+                }
+            })
+        }
+
+        function renderTable(samples) {
+            if (samples.length === 0) {
+                tableWrapper.innerHTML = ""
+                return
+            }
+            const rows = samples.map(item => {
+                return `
+                    <tr>
+                        <td>${item.timeLabel}</td>
+                        <td>${item.weather}</td>
+                        <td>${item.temperature.toFixed(1)}</td>
+                        <td>${item.windSpeed.toFixed(1)}</td>
+                        <td>${windDirectionText(item.windDirection)}</td>
+                        <td>${item.distanceKm.toFixed(2)}</td>
+                    </tr>
+                `
+            }).join("")
+
+            tableWrapper.innerHTML = `
+                <table>
+                    <thead>
+                        <tr>
+                            <th>时间</th>
+                            <th>天气情况</th>
+                            <th>气温 (°C)</th>
+                            <th>风力 (km/h)</th>
+                            <th>风向 (°)</th>
+                            <th>沿线里程 (km)</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${rows}
+                    </tbody>
+                </table>
+            `
+        }
+
+        function formatTimeLabel(date) {
+            return new Intl.DateTimeFormat("zh-CN", {
+                year: "numeric",
+                month: "2-digit",
+                day: "2-digit",
+                hour: "2-digit",
+                minute: "2-digit",
+                hour12: false
+            }).format(date)
+        }
+
+        function exportCsv(samples) {
+            if (!samples.length) {
+                return
+            }
+            const header = ["时间", "天气情况", "气温(°C)", "风力(km/h)", "风向", "沿线里程(km)"]
+            const rows = samples.map(item => [
+                item.timeLabel,
+                item.weather,
+                item.temperature.toFixed(1),
+                item.windSpeed.toFixed(1),
+                windDirectionText(item.windDirection),
+                item.distanceKm.toFixed(2)
+            ])
+            const csv = [header, ...rows].map(row => row.map(cell => `"${String(cell).replace(/"/g, "\"\"")}"`).join(",")).join("\n")
+            const blob = new Blob(["\uFEFF", csv], { type: "text/csv;charset=utf-8;" })
+            const url = URL.createObjectURL(blob)
+            const link = document.createElement("a")
+            const safeStart = lastRange.start ? formatFileTime(lastRange.start) : ""
+            const safeEnd = lastRange.end ? formatFileTime(lastRange.end) : ""
+            const base = gpxFileName || "gpx"
+            const nameParts = [base, safeStart, safeEnd].filter(Boolean)
+            const filename = nameParts.join("_") || `gpx-hourly-weather-${new Date().toISOString().replace(/[:]/g, "-").slice(0, 19)}`
+            link.href = url
+            link.download = `${filename}.csv`
+            document.body.appendChild(link)
+            link.click()
+            document.body.removeChild(link)
+            URL.revokeObjectURL(url)
+        }
+
+        function formatFileTime(date) {
+            const pad = value => String(value).padStart(2, "0")
+            return `${date.getFullYear()}${pad(date.getMonth() + 1)}${pad(date.getDate())}-${pad(date.getHours())}${pad(date.getMinutes())}`
+        }
+
+        function setStatus(text) {
+            statusEl.textContent = text
+        }
+
+        function setFileInfo(text) {
+            fileInfo.textContent = text
+        }
+
+        uploadArea.addEventListener("click", () => fileInput.click())
+
+        uploadArea.addEventListener("dragover", event => {
+            event.preventDefault()
+            uploadArea.classList.add("dragover")
+        })
+
+        uploadArea.addEventListener("dragleave", () => {
+            uploadArea.classList.remove("dragover")
+        })
+
+        uploadArea.addEventListener("drop", event => {
+            event.preventDefault()
+            uploadArea.classList.remove("dragover")
+            if (event.dataTransfer.files.length > 0) {
+                fileInput.files = event.dataTransfer.files
+                handleFile(fileInput.files[0])
+            }
+        })
+
+        fileInput.addEventListener("change", () => {
+            if (fileInput.files.length > 0) {
+                handleFile(fileInput.files[0])
+            }
+        })
+
+        useDurationInput.addEventListener("change", () => {
+            const useDuration = useDurationInput.checked
+            endTimeInput.style.display = useDuration ? "none" : "block"
+            durationHoursInput.style.display = useDuration ? "block" : "none"
+            endLabel.textContent = useDuration ? "持续时长" : "结束时间"
+        })
+
+        exportBtn.addEventListener("click", () => exportCsv(lastSamples))
+
+        startTimeInput.value = toLocalDatetimeValue(nextFullHour())
+
+        function handleFile(file) {
+            if (!file) return
+            if (!file.name.toLowerCase().endsWith(".gpx")) {
+                setFileInfo("请选择 GPX 文件")
+                return
+            }
+            gpxFileName = file.name.replace(/\.[^/.]+$/, "")
+            const reader = new FileReader()
+            reader.onload = () => {
+                const parsed = parseGpx(reader.result)
+                if (!parsed) {
+                    setFileInfo("无法解析 GPX，请确认包含轨迹点")
+                    gpxData = null
+                    generateBtn.disabled = true
+                    return
+                }
+                gpxData = parsed
+                setFileInfo(`已加载：${file.name}，轨迹点 ${parsed.points.length} 个，总里程 ${(parsed.totalDistance / 1000).toFixed(2)} km`)
+                const times = parsed.points.map(p => p.time).filter(Boolean)
+                if (times.length > 0) {
+                    const sorted = times.sort((a, b) => a - b)
+                    startTimeInput.value = toLocalDatetimeValue(sorted[0])
+                    endTimeInput.value = toLocalDatetimeValue(sorted[sorted.length - 1])
+                }
+                generateBtn.disabled = false
+            }
+            reader.readAsText(file)
+        }
+
+        generateBtn.addEventListener("click", async () => {
+            if (!gpxData) {
+                setStatus("请先上传 GPX 文件")
+                return
+            }
+            const startValue = startTimeInput.value
+            const endValue = endTimeInput.value
+            const useDuration = useDurationInput.checked
+            if (!startValue || (!endValue && !useDuration)) {
+                setStatus("请填写起始时间")
+                return
+            }
+            const start = new Date(startValue)
+            const end = useDuration
+                ? new Date(start.getTime() + Number(durationHoursInput.value || 0) * 3600000)
+                : new Date(endValue)
+            if (useDuration && (!durationHoursInput.value || Number(durationHoursInput.value) <= 0)) {
+                setStatus("请填写有效的持续时长")
+                return
+            }
+            if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime()) || end <= start) {
+                setStatus("时间范围无效")
+                return
+            }
+
+            generateBtn.disabled = true
+            setStatus("正在生成采样点并获取天气数据...")
+
+            const duration = end.getTime() - start.getTime()
+            lastRange = { start, end }
+            const sampleTimes = generateSampleTimes(start, end)
+            const samples = []
+
+            let index = 0
+            for (const time of sampleTimes) {
+                const ratio = (time.getTime() - start.getTime()) / duration
+                const targetDistance = gpxData.totalDistance * Math.min(Math.max(ratio, 0), 1)
+                const { lat, lon, index: newIndex } = interpolateByDistance(gpxData, targetDistance, index)
+                index = newIndex
+                samples.push({
+                    time,
+                    timeLabel: formatTimeLabel(time),
+                    lat,
+                    lon,
+                    distanceKm: targetDistance / 1000
+                })
+            }
+
+            const startDate = toLocalDateString(start)
+            const endDate = toLocalDateString(end)
+
+            try {
+                const grouped = new Map()
+                for (const sample of samples) {
+                    const roundedLat = roundCoord(sample.lat)
+                    const roundedLon = roundCoord(sample.lon)
+                    const key = `${roundedLat.toFixed(3)},${roundedLon.toFixed(3)}`
+                    sample.cacheKey = key
+                    if (!grouped.has(key)) {
+                        grouped.set(key, { lat: roundedLat, lon: roundedLon })
+                    }
+                }
+
+                const weatherDataByKey = new Map()
+                for (const [key, info] of grouped.entries()) {
+                    const data = await fetchWeather(info.lat, info.lon, startDate, endDate)
+                    weatherDataByKey.set(key, data)
+                }
+
+                for (const sample of samples) {
+                    const data = weatherDataByKey.get(sample.cacheKey)
+                    const times = data.hourly.time
+                    const idx = closestHourIndex(times, sample.time)
+                    const code = data.hourly.weathercode[idx]
+                    sample.weather = weatherCodeMap[code] || `天气代码 ${code}`
+                    sample.temperature = data.hourly.temperature_2m[idx]
+                    sample.windSpeed = data.hourly.windspeed_10m[idx]
+                    sample.windDirection = data.hourly.winddirection_10m[idx]
+                }
+                lastSamples = samples
+                renderChart(samples)
+                renderTable(samples)
+                setStatus(`完成，共 ${samples.length} 个采样点`)
+                exportBtn.disabled = false
+            } catch (error) {
+                setStatus(error.message || "获取天气数据失败")
+                exportBtn.disabled = true
+            } finally {
+                generateBtn.disabled = false
+            }
+        })
+    </script>
+</body>
+</html>
