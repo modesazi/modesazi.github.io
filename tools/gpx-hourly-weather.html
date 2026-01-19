@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>GPX 逐小时气象采样</title>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/pako@2.1.0/dist/pako.min.js"></script>
     <style>
         * {
             box-sizing: border-box;
@@ -211,6 +212,7 @@
                 <h2>3. 生成结果</h2>
                 <button id="generateBtn" class="btn" disabled>生成逐小时气象采样</button>
                 <button id="exportBtn" class="btn" style="margin-top: 10px;" disabled>导出表格 CSV</button>
+                <button id="shareBtn" class="btn" style="margin-top: 10px;" disabled>分享链接</button>
                 <div id="status" class="status"></div>
             </div>
 
@@ -236,6 +238,7 @@
         const endLabel = document.getElementById("endLabel")
         const generateBtn = document.getElementById("generateBtn")
         const exportBtn = document.getElementById("exportBtn")
+        const shareBtn = document.getElementById("shareBtn")
         const statusEl = document.getElementById("status")
         const tableWrapper = document.getElementById("tableWrapper")
         const weatherChartCanvas = document.getElementById("weatherChart")
@@ -449,7 +452,15 @@
             url.searchParams.set("end_date", endDate)
             const response = await fetch(url.toString())
             if (!response.ok) {
-                throw new Error("无法获取天气数据")
+                if (response.status === 429) {
+                    throw new Error(`API 请求限制：请稍后再试 (HTTP ${response.status})`)
+                } else if (response.status === 400) {
+                    throw new Error(`坐标无效或参数错误 (HTTP ${response.status})`)
+                } else if (response.status >= 500) {
+                    throw new Error(`天气服务暂时不可用 (HTTP ${response.status})`)
+                } else {
+                    throw new Error(`无法获取天气数据 (HTTP ${response.status})`)
+                }
             }
             const data = await response.json()
             weatherCache.set(key, data)
@@ -651,6 +662,32 @@
             return `${date.getFullYear()}${pad(date.getMonth() + 1)}${pad(date.getDate())}-${pad(date.getHours())}${pad(date.getMinutes())}`
         }
 
+        function compressData(data) {
+            const json = JSON.stringify(data)
+            const bytes = new TextEncoder().encode(json)
+            const compressed = pako.deflate(bytes, { level: 9 })
+            let binary = ""
+            for (let i = 0; i < compressed.length; i++) {
+                binary += String.fromCharCode(compressed[i])
+            }
+            return btoa(binary)
+        }
+
+        function decompressData(encoded) {
+            try {
+                const binary = atob(encoded)
+                const bytes = new Uint8Array(binary.length)
+                for (let i = 0; i < binary.length; i++) {
+                    bytes[i] = binary.charCodeAt(i)
+                }
+                const decompressed = pako.inflate(bytes)
+                const json = new TextDecoder().decode(decompressed)
+                return JSON.parse(json)
+            } catch {
+                return null
+            }
+        }
+
         function setStatus(text) {
             statusEl.textContent = text
         }
@@ -694,7 +731,84 @@
 
         exportBtn.addEventListener("click", () => exportCsv(lastSamples))
 
+        shareBtn.addEventListener("click", () => {
+            if (!lastSamples.length) {
+                return
+            }
+            const compressed = compressData({
+                samples: lastSamples.map(s => ({
+                    t: s.time.getTime(),
+                    lat: s.lat,
+                    lon: s.lon,
+                    d: s.distanceKm,
+                    w: s.weather,
+                    temp: s.temperature,
+                    ws: s.windSpeed,
+                    wd: s.windDirection
+                })),
+                fileName: gpxFileName,
+                start: lastRange.start ? lastRange.start.getTime() : null,
+                end: lastRange.end ? lastRange.end.getTime() : null
+            })
+            const url = new URL(window.location.href)
+            url.searchParams.set("d", compressed)
+            const urlString = url.toString()
+            
+            if (urlString.length > 2000) {
+                const warning = `⚠️ 链接长度 ${urlString.length} 字符，可能在某些浏览器或平台中无法正常使用（建议小于 2000 字符）`
+                setStatus(warning)
+                if (!confirm(`${warning}\n\n是否继续复制？`)) {
+                    return
+                }
+            }
+            
+            navigator.clipboard.writeText(urlString).then(() => {
+                setStatus("分享链接已复制到剪贴板")
+            }).catch(() => {
+                prompt("分享链接：", urlString)
+            })
+        })
+
         startTimeInput.value = toLocalDatetimeValue(nextFullHour())
+
+        function loadSharedData() {
+            const params = new URLSearchParams(window.location.search)
+            const encoded = params.get("d")
+            if (!encoded) {
+                return
+            }
+            const data = decompressData(encoded)
+            if (!data || !data.samples || !Array.isArray(data.samples)) {
+                setStatus("无法加载分享数据")
+                return
+            }
+            lastSamples = data.samples.map(s => ({
+                time: new Date(s.t),
+                timeLabel: formatTimeLabel(new Date(s.t)),
+                lat: s.lat,
+                lon: s.lon,
+                distanceKm: s.d,
+                weather: s.w,
+                temperature: s.temp,
+                windSpeed: s.ws,
+                windDirection: s.wd
+            }))
+            gpxFileName = data.fileName || "shared"
+            if (data.start) {
+                lastRange.start = new Date(data.start)
+            }
+            if (data.end) {
+                lastRange.end = new Date(data.end)
+            }
+            renderChart(lastSamples)
+            renderTable(lastSamples)
+            exportBtn.disabled = false
+            shareBtn.disabled = false
+            setFileInfo(`已加载分享数据，共 ${lastSamples.length} 个采样点`)
+            setStatus(`已加载分享数据，共 ${lastSamples.length} 个采样点`)
+        }
+
+        loadSharedData()
 
         function handleFile(file) {
             if (!file) return
@@ -812,9 +926,14 @@
                 renderTable(samples)
                 setStatus(`完成，共 ${samples.length} 个采样点`)
                 exportBtn.disabled = false
+                shareBtn.disabled = false
             } catch (error) {
-                setStatus(error.message || "获取天气数据失败")
+                console.error("天气数据获取失败：", error)
+                const errorMsg = error.message || "获取天气数据失败"
+                const detailedMsg = error.stack ? `${errorMsg}（详见控制台）` : errorMsg
+                setStatus(`❌ ${detailedMsg}`)
                 exportBtn.disabled = true
+                shareBtn.disabled = true
             } finally {
                 generateBtn.disabled = false
             }
