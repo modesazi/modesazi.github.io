@@ -52,6 +52,21 @@
             gap: 20px;
         }
 
+        @media (min-width: 1024px) and (orientation: landscape) {
+            .content {
+                grid-template-columns: 400px 1fr;
+            }
+            
+            .card-left {
+                grid-column: 1;
+            }
+            
+            .card-right {
+                grid-column: 2;
+                grid-row: 1 / 4;
+            }
+        }
+
         .card {
             border: 1px solid #e6e6e6;
             border-radius: 14px;
@@ -160,7 +175,7 @@
         th {
             background: #f5fbff;
         }
-
+ card-left
         .note {
             color: #6b6b6b;
             font-size: 0.85em;
@@ -186,7 +201,7 @@
                 <div id="fileInfo" class="status"></div>
             </div>
 
-            <div class="card">
+            <div class="card card-left">
                 <h2>2. 设置时间范围</h2>
                 <div class="form-grid">
                     <div>
@@ -208,7 +223,7 @@
                 <div class="note">采样规则：包含 start；按整点逐小时采样；若 end 非整点则额外包含 end。</div>
             </div>
 
-            <div class="card">
+            <div class="card card-left">
                 <h2>3. 生成结果</h2>
                 <button id="generateBtn" class="btn" disabled>生成逐小时气象采样</button>
                 <button id="exportBtn" class="btn" style="margin-top: 10px;" disabled>导出表格 CSV</button>
@@ -216,7 +231,7 @@
                 <div id="status" class="status"></div>
             </div>
 
-            <div class="card">
+            <div class="card card-right">
                 <h2>4. 绘图与结果表</h2>
                 <div class="chart-wrapper">
                     <canvas id="weatherChart"></canvas>
@@ -248,6 +263,7 @@
         let lastSamples = []
         let gpxFileName = "gpx"
         let lastRange = { start: null, end: null }
+        let isSharedData = false
 
         const weatherCodeMap = {
             0: "晴朗",
@@ -751,11 +767,12 @@
                 end: lastRange.end ? lastRange.end.getTime() : null
             })
             const url = new URL(window.location.href)
-            url.searchParams.set("d", compressed)
+            url.search = ""
+            url.hash = compressed
             const urlString = url.toString()
             
-            if (urlString.length > 2000) {
-                const warning = `⚠️ 链接长度 ${urlString.length} 字符，可能在某些浏览器或平台中无法正常使用（建议小于 2000 字符）`
+            if (urlString.length > 100000) {
+                const warning = `⚠️ 链接长度 ${urlString.length} 字符，超过建议上限（100000 字符），可能在部分浏览器中无法使用`
                 setStatus(warning)
                 if (!confirm(`${warning}\n\n是否继续复制？`)) {
                     return
@@ -772,8 +789,7 @@
         startTimeInput.value = toLocalDatetimeValue(nextFullHour())
 
         function loadSharedData() {
-            const params = new URLSearchParams(window.location.search)
-            const encoded = params.get("d")
+            const encoded = window.location.hash.slice(1)
             if (!encoded) {
                 return
             }
@@ -804,6 +820,9 @@
             renderTable(lastSamples)
             exportBtn.disabled = false
             shareBtn.disabled = false
+            generateBtn.disabled = false
+            generateBtn.textContent = "刷新天气数据"
+            isSharedData = true
             setFileInfo(`已加载分享数据，共 ${lastSamples.length} 个采样点`)
             setStatus(`已加载分享数据，共 ${lastSamples.length} 个采样点`)
         }
@@ -837,12 +856,69 @@
                     startTimeInput.value = toLocalDatetimeValue(sorted[0])
                     endTimeInput.value = toLocalDatetimeValue(sorted[sorted.length - 1])
                 }
+                isSharedData = false
+                generateBtn.textContent = "生成逐小时气象采样"
                 generateBtn.disabled = false
             }
             reader.readAsText(file)
         }
 
         generateBtn.addEventListener("click", async () => {
+            if (isSharedData) {
+                if (!lastSamples.length) {
+                    setStatus("无可刷新的数据")
+                    return
+                }
+                generateBtn.disabled = true
+                setStatus("正在刷新天气数据...")
+                
+                const startDate = toLocalDateString(lastRange.start)
+                const endDate = toLocalDateString(lastRange.end)
+                
+                try {
+                    const grouped = new Map()
+                    for (const sample of lastSamples) {
+                        const roundedLat = roundCoord(sample.lat)
+                        const roundedLon = roundCoord(sample.lon)
+                        const key = `${roundedLat.toFixed(3)},${roundedLon.toFixed(3)}`
+                        sample.cacheKey = key
+                        if (!grouped.has(key)) {
+                            grouped.set(key, { lat: roundedLat, lon: roundedLon })
+                        }
+                    }
+                    
+                    weatherCache.clear()
+                    const weatherDataByKey = new Map()
+                    for (const [key, info] of grouped.entries()) {
+                        const data = await fetchWeather(info.lat, info.lon, startDate, endDate)
+                        weatherDataByKey.set(key, data)
+                    }
+                    
+                    for (const sample of lastSamples) {
+                        const data = weatherDataByKey.get(sample.cacheKey)
+                        const times = data.hourly.time
+                        const idx = closestHourIndex(times, sample.time)
+                        const code = data.hourly.weathercode[idx]
+                        sample.weather = weatherCodeMap[code] || `天气代码 ${code}`
+                        sample.temperature = data.hourly.temperature_2m[idx]
+                        sample.windSpeed = data.hourly.windspeed_10m[idx]
+                        sample.windDirection = data.hourly.winddirection_10m[idx]
+                    }
+                    
+                    renderChart(lastSamples)
+                    renderTable(lastSamples)
+                    setStatus(`刷新完成，共 ${lastSamples.length} 个采样点`)
+                } catch (error) {
+                    console.error("天气数据刷新失败：", error)
+                    const errorMsg = error.message || "刷新天气数据失败"
+                    const detailedMsg = error.stack ? `${errorMsg}（详见控制台）` : errorMsg
+                    setStatus(`❌ ${detailedMsg}`)
+                } finally {
+                    generateBtn.disabled = false
+                }
+                return
+            }
+            
             if (!gpxData) {
                 setStatus("请先上传 GPX 文件")
                 return
