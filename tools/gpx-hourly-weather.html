@@ -175,13 +175,13 @@
         </div>
         <div class="content">
             <div class="card">
-                <h2>1. 上传 GPX 文件</h2>
+                <h2>1. 上传 GPX/TCX 文件</h2>
                 <div id="uploadArea" class="upload-area">
                     <div style="font-size: 2em;">📤</div>
-                    <p style="margin-top: 8px;">拖拽 GPX 文件至此或点击选择</p>
-                    <p style="margin-top: 6px; color: #6b6b6b; font-size: 0.9em;">仅支持 .gpx</p>
+                    <p style="margin-top: 8px;">拖拽 GPX/TCX 文件至此或点击选择</p>
+                    <p style="margin-top: 6px; color: #6b6b6b; font-size: 0.9em;">支持 .gpx / .tcx</p>
                 </div>
-                <input id="fileInput" type="file" accept=".gpx" style="display: none;">
+                <input id="fileInput" type="file" accept=".gpx,.tcx" style="display: none;">
                 <div id="fileInfo" class="status"></div>
             </div>
 
@@ -329,6 +329,45 @@
                 distances.push(total)
             }
 
+            return {
+                points: result,
+                distances,
+                totalDistance: total
+            }
+        }
+
+        function parseTcx(text) {
+            const parser = new DOMParser()
+            const xml = parser.parseFromString(text, "application/xml")
+            const points = Array.from(xml.getElementsByTagName("Trackpoint"))
+            if (points.length === 0) {
+                return null
+            }
+            const result = []
+            for (const pt of points) {
+                const position = pt.getElementsByTagName("Position")[0]
+                if (!position) {
+                    continue
+                }
+                const latNode = position.getElementsByTagName("LatitudeDegrees")[0]
+                const lonNode = position.getElementsByTagName("LongitudeDegrees")[0]
+                const timeNode = pt.getElementsByTagName("Time")[0]
+                const lat = latNode ? parseFloat(latNode.textContent) : NaN
+                const lon = lonNode ? parseFloat(lonNode.textContent) : NaN
+                const time = timeNode ? new Date(timeNode.textContent) : null
+                if (Number.isFinite(lat) && Number.isFinite(lon)) {
+                    result.push({ lat, lon, time })
+                }
+            }
+            if (result.length < 2) {
+                return null
+            }
+            const distances = [0]
+            let total = 0
+            for (let i = 1; i < result.length; i++) {
+                total += haversine(result[i - 1], result[i])
+                distances.push(total)
+            }
             return {
                 points: result,
                 distances,
@@ -659,16 +698,19 @@
 
         function handleFile(file) {
             if (!file) return
-            if (!file.name.toLowerCase().endsWith(".gpx")) {
-                setFileInfo("请选择 GPX 文件")
+            const lowerName = file.name.toLowerCase()
+            const isGpx = lowerName.endsWith(".gpx")
+            const isTcx = lowerName.endsWith(".tcx")
+            if (!isGpx && !isTcx) {
+                setFileInfo("请选择 GPX 或 TCX 文件")
                 return
             }
             gpxFileName = file.name.replace(/\.[^/.]+$/, "")
             const reader = new FileReader()
             reader.onload = () => {
-                const parsed = parseGpx(reader.result)
+                const parsed = isTcx ? parseTcx(reader.result) : parseGpx(reader.result)
                 if (!parsed) {
-                    setFileInfo("无法解析 GPX，请确认包含轨迹点")
+                    setFileInfo("无法解析文件，请确认包含轨迹点")
                     gpxData = null
                     generateBtn.disabled = true
                     return
