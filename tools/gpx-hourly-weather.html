@@ -237,7 +237,7 @@
                     <canvas id="weatherChart"></canvas>
                 </div>
                 <div id="tableWrapper" style="margin-top: 16px; overflow-x: auto;"></div>
-                <div class="note">气温单位：°C，风力单位：km/h，风向单位：°（0-360）。</div>
+                <div class="note">温度单位：°C，风速单位：m/s。</div>
             </div>
         </div>
     </div>
@@ -462,7 +462,8 @@
             const url = new URL("https://api.open-meteo.com/v1/forecast")
             url.searchParams.set("latitude", lat)
             url.searchParams.set("longitude", lon)
-            url.searchParams.set("hourly", "weathercode,temperature_2m,windspeed_10m,winddirection_10m")
+            url.searchParams.set("hourly", "weathercode,temperature_2m,apparent_temperature,windspeed_10m,winddirection_10m")
+            url.searchParams.set("wind_speed_unit", "ms")
             url.searchParams.set("timezone", "auto")
             url.searchParams.set("start_date", startDate)
             url.searchParams.set("end_date", endDate)
@@ -525,7 +526,7 @@
         function renderChart(samples) {
             const labels = samples.map(item => item.timeLabel)
             const temperature = samples.map(item => item.temperature)
-            const windSpeed = samples.map(item => item.windSpeed)
+            const apparentTemperature = samples.map(item => item.apparentTemperature)
             const weatherText = samples.map(item => item.weather)
 
             if (chartInstance) {
@@ -546,12 +547,12 @@
                             yAxisID: "yTemp"
                         },
                         {
-                            label: "风力 (km/h)",
-                            data: windSpeed,
+                            label: "体感温度 (°C)",
+                            data: apparentTemperature,
                             borderColor: "#4facfe",
                             backgroundColor: "rgba(79, 172, 254, 0.2)",
                             tension: 0.3,
-                            yAxisID: "y"
+                            yAxisID: "yTemp"
                         }
                     ]
                 },
@@ -562,22 +563,11 @@
                         intersect: false
                     },
                     scales: {
-                        y: {
-                            position: "left",
-                            title: {
-                                display: true,
-                                text: "风力 (km/h)"
-                            }
-                        },
                         yTemp: {
                             position: "left",
-                            offset: true,
                             title: {
                                 display: true,
-                                text: "气温 (°C)"
-                            },
-                            grid: {
-                                drawOnChartArea: false
+                                text: "温度 (°C)"
                             }
                         }
                     },
@@ -606,6 +596,7 @@
                         <td>${item.timeLabel}</td>
                         <td>${item.weather}</td>
                         <td>${item.temperature.toFixed(1)}</td>
+                        <td>${item.apparentTemperature.toFixed(1)}</td>
                         <td>${item.windSpeed.toFixed(1)}</td>
                         <td>${windDirectionText(item.windDirection)}</td>
                         <td>${item.distanceKm.toFixed(2)}</td>
@@ -620,8 +611,9 @@
                             <th>时间</th>
                             <th>天气情况</th>
                             <th>气温 (°C)</th>
-                            <th>风力 (km/h)</th>
-                            <th>风向 (°)</th>
+                            <th>体感温度 (°C)</th>
+                            <th>风速 (m/s)</th>
+                            <th>风向</th>
                             <th>沿线里程 (km)</th>
                         </tr>
                     </thead>
@@ -647,11 +639,12 @@
             if (!samples.length) {
                 return
             }
-            const header = ["时间", "天气情况", "气温(°C)", "风力(km/h)", "风向", "沿线里程(km)"]
+            const header = ["时间", "天气情况", "气温(°C)", "体感温度(°C)", "风速(m/s)", "风向", "沿线里程(km)"]
             const rows = samples.map(item => [
                 item.timeLabel,
                 item.weather,
                 item.temperature.toFixed(1),
+                item.apparentTemperature.toFixed(1),
                 item.windSpeed.toFixed(1),
                 windDirectionText(item.windDirection),
                 item.distanceKm.toFixed(2)
@@ -759,6 +752,7 @@
                     d: s.distanceKm,
                     w: s.weather,
                     temp: s.temperature,
+                    atemp: s.apparentTemperature,
                     ws: s.windSpeed,
                     wd: s.windDirection
                 })),
@@ -806,6 +800,7 @@
                 distanceKm: s.d,
                 weather: s.w,
                 temperature: s.temp,
+                apparentTemperature: s.atemp || s.temp,
                 windSpeed: s.ws,
                 windDirection: s.wd
             }))
@@ -901,6 +896,7 @@
                         const code = data.hourly.weathercode[idx]
                         sample.weather = weatherCodeMap[code] || `天气代码 ${code}`
                         sample.temperature = data.hourly.temperature_2m[idx]
+                        sample.apparentTemperature = data.hourly.apparent_temperature[idx]
                         sample.windSpeed = data.hourly.windspeed_10m[idx]
                         sample.windDirection = data.hourly.winddirection_10m[idx]
                     }
@@ -994,6 +990,7 @@
                     const code = data.hourly.weathercode[idx]
                     sample.weather = weatherCodeMap[code] || `天气代码 ${code}`
                     sample.temperature = data.hourly.temperature_2m[idx]
+                    sample.apparentTemperature = data.hourly.apparent_temperature[idx]
                     sample.windSpeed = data.hourly.windspeed_10m[idx]
                     sample.windDirection = data.hourly.winddirection_10m[idx]
                 }
