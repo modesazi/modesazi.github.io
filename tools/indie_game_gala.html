@@ -1,0 +1,969 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>独立游戏蜥蜴君的独游春晚 - 年度独立游戏大赏</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@300;400;500;700;900&display=swap');
+        
+        body {
+            font-family: 'Noto Sans SC', sans-serif;
+            background-color: #0f172a; /* slate-900 */
+            color: #f8fafc; /* slate-50 */
+        }
+        
+        .glass {
+            background: rgba(30, 41, 59, 0.6); /* slate-800 */
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+        }
+        
+        .glass-header {
+            background: rgba(15, 23, 42, 0.85); /* slate-900 */
+            backdrop-filter: blur(16px);
+            -webkit-backdrop-filter: blur(16px);
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .winner-card {
+            background: linear-gradient(145deg, rgba(234, 179, 8, 0.15) 0%, rgba(30, 41, 59, 0.8) 100%);
+            border: 1px solid rgba(234, 179, 8, 0.4);
+            box-shadow: 0 4px 20px rgba(234, 179, 8, 0.1);
+            position: relative;
+        }
+        
+        .winner-card::before {
+            content: '';
+            position: absolute;
+            top: 0; left: 0; right: 0; bottom: 0;
+            border-radius: inherit;
+            background: linear-gradient(45deg, transparent, rgba(255,255,255,0.1), transparent);
+            transform: translateX(-100%);
+            transition: 0.6s;
+        }
+
+        .winner-card:hover::before {
+            transform: translateX(100%);
+        }
+
+        .winner-card:hover {
+            border-color: rgba(234, 179, 8, 0.8);
+            box-shadow: 0 6px 25px rgba(234, 179, 8, 0.2);
+            transform: translateY(-2px);
+        }
+
+        .normal-card {
+            transition: all 0.3s ease;
+        }
+
+        .normal-card:hover {
+            border-color: rgba(96, 165, 250, 0.5); /* blue-400 */
+            background-color: rgba(51, 65, 85, 0.8); /* slate-700 */
+            transform: translateY(-2px);
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3);
+        }
+
+        /* Custom Scrollbar */
+        ::-webkit-scrollbar {
+            width: 8px;
+            height: 8px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #0f172a; 
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #334155; 
+            border-radius: 4px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #475569; 
+        }
+    </style>
+</head>
+<body class="antialiased h-screen overflow-hidden">
+    <div id="app" class="flex flex-col h-full">
+        <!-- Header -->
+        <header class="glass-header z-20 px-6 py-4 flex flex-col md:flex-row items-center justify-between gap-4 flex-shrink-0">
+            <div class="flex items-center gap-3">
+                <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center shadow-lg shadow-blue-500/30">
+                    <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                </div>
+                <div>
+                        <div class="flex items-center gap-3">
+                            <h2 class="text-xl md:text-2xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-blue-400 to-purple-400">独立游戏蜥蜴君的独游春晚</h2>
+                            <span class="px-2 py-0.5 rounded-md bg-blue-500/20 text-blue-300 text-xs border border-blue-500/30">年度独立游戏大赏</span>
+                        </div>
+                        <div class="flex items-center bg-slate-800/80 rounded-lg p-1 border border-slate-700/50 mt-1">
+                            <button @click="currentYear = 2026" 
+                                    class="px-4 py-1.5 rounded-md text-sm font-medium transition-all"
+                                    :class="currentYear === 2026 ? 'bg-blue-600 text-white shadow-lg shadow-blue-900/50' : 'text-slate-400 hover:text-white'">
+                                2026
+                            </button>
+                            <button @click="currentYear = 2025" 
+                                    class="px-4 py-1.5 rounded-md text-sm font-medium transition-all"
+                                    :class="currentYear === 2025 ? 'bg-purple-600 text-white shadow-lg shadow-purple-900/50' : 'text-slate-400 hover:text-white'">
+                                2025
+                            </button>
+                            <button @click="currentYear = 2024" 
+                                    class="px-4 py-1.5 rounded-md text-sm font-medium transition-all"
+                                    :class="currentYear === 2024 ? 'bg-emerald-600 text-white shadow-lg shadow-emerald-900/50' : 'text-slate-400 hover:text-white'">
+                                2024
+                            </button>
+                        </div>
+                    <p class="text-xs text-slate-400">XGA年度独立游戏大赏 完整名单</p>
+                </div>
+            </div>
+            
+            <div class="relative w-full md:w-96">
+                <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                    <svg class="w-5 h-5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>
+                </div>
+                <input v-model="searchQuery" type="text" placeholder="搜索游戏..." 
+                       class="w-full bg-slate-800/50 border border-slate-700 text-white rounded-full py-2 pl-10 pr-4 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-colors">
+            </div>
+        </header>
+
+        <!-- Main Content -->
+        <div class="flex-1 flex overflow-hidden">
+            <!-- Sidebar Navigation (Desktop) -->
+            <nav class="hidden lg:block w-72 glass border-r border-slate-700/50 overflow-y-auto flex-shrink-0 p-4">
+                <div class="sticky top-0">
+                    <h2 class="text-sm font-bold text-slate-400 uppercase tracking-wider mb-4 px-2">游戏分类</h2>
+                    <ul class="space-y-1">
+                        <li v-for="cat in categories" :key="cat.title">
+                            <button @click="scrollToCat(cat.title)" 
+                                    class="w-full text-left px-3 py-2.5 rounded-lg transition-all duration-200 flex items-center gap-2"
+                                    :class="activeCategory === cat.title ? 'bg-blue-600/20 text-blue-400 border border-blue-500/30 font-medium' : 'text-slate-300 border border-transparent hover:bg-slate-800/80 hover:text-white'">
+                            <span class="truncate">{{ cat.title }}</span>
+                            </button>
+                        </li>
+                    </ul>
+                </div>
+            </nav>
+            <!-- Scrollable Content Area -->
+            <main class="flex-1 overflow-y-auto p-4 md:p-8 scroll-smooth" id="main-scroll">
+                <div v-if="filteredCategories.length === 0" class="flex flex-col items-center justify-center h-full text-slate-500">
+                    <svg class="w-16 h-16 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.172 16.172a4 4 0 015.656 0M9 10h.01M15 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                    <p class="text-lg">未找到匹配的游戏</p>
+                </div>
+                
+                <div class="max-w-6xl mx-auto space-y-12 pb-24">
+                    <section v-for="cat in filteredCategories" :key="cat.title" :id="'cat-' + cat.title" class="category-section scroll-mt-24">
+                        <div class="flex items-center gap-3 mb-6">
+                            <h2 class="text-2xl font-bold text-white">{{ cat.title }}</h2>
+                            <div class="h-px flex-1 bg-gradient-to-r from-slate-700 to-transparent"></div>
+                        </div>
+                        
+                        <div class="space-y-8">
+                            <div v-for="sub in cat.subcategories" :key="sub.title" class="bg-slate-800/30 rounded-2xl p-5 md:p-6 border border-slate-700/50">
+                                <h3 class="text-lg font-medium text-slate-300 mb-5 flex items-center gap-2">
+                                    <span class="w-1.5 h-5 bg-blue-500 rounded-full"></span>
+                                    {{ sub.title }}
+                                </h3>
+                                
+                                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+                                    <a v-for="game in sub.games" :key="game.name" 
+                                       :href="getSteamLink(game.name)" target="_blank"
+                                       class="block p-4 rounded-xl border relative group overflow-hidden"
+                                       :class="game.winner ? 'winner-card' : 'glass normal-card'">
+                                        
+                                        <div v-if="game.winner" class="absolute -top-1 -right-1 bg-yellow-500 text-yellow-950 text-[10px] font-bold px-2 py-0.5 rounded-bl-lg rounded-tr-lg shadow-lg flex items-center gap-1 z-10">
+                                            🏆 获奖
+                                        </div>
+                                        
+                                        <h4 class="text-base font-medium pr-8" :class="game.winner ? 'text-yellow-400' : 'text-slate-200 group-hover:text-blue-400'">
+                                            {{ game.name }}
+                                        </h4>
+                                        
+                                        <div class="mt-4 pt-3 border-t border-slate-700/50 flex items-center justify-between text-xs text-slate-400 group-hover:text-blue-300 transition-colors">
+                                            <span>前往 Steam</span>
+                                            <svg class="w-4 h-4 transform group-hover:translate-x-1 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 5l7 7m0 0l-7 7m7-7H3"></path></svg>
+                                        </div>
+                                    </a>
+                                </div>
+                            </div>
+                        </div>
+                    </section>
+                </div>
+            </main>
+        </div>
+    </div>
+
+    <script>
+        const { createApp, ref, computed, onMounted } = Vue;
+
+        createApp({
+            setup() {
+                const searchQuery = ref('');
+                const currentYear = ref(2026);
+                const activeCategory = ref('');
+
+                const categories2026 = [
+                    {
+                        title: "👑 年度独立游戏",
+                        subcategories: [
+                            {
+                                title: "最高大奖提名",
+                                games: [
+                                    { name: "Hollow Knight: Silksong（空洞骑士：丝之歌）", winner: true },
+                                    { name: "The Bazaar（大巴扎）", winner: false },
+                                    { name: "蓝途王子", winner: false },
+                                    { name: "Look Outside", winner: false },
+                                    { name: "苏丹的游戏", winner: false }
+                                ]
+                            }
+                        ]
+                    },
+                    {
+                        title: "⚔️ 肉鸽类 (Roguelike)",
+                        subcategories: [
+                            {
+                                title: "年度最佳肉鸽策略类",
+                                games: [
+                                    { name: "The Bazaar（大巴扎）", winner: true },
+                                    { name: "Forestrike（一预视武宗）", winner: true },
+                                    { name: "王之凝视", winner: false },
+                                    { name: "矮人防线", winner: false },
+                                    { name: "九王", winner: false },
+                                    { name: "Tower dominion", winner: false },
+                                    { name: "Minos - 牛头人迷阵", winner: false },
+                                    { name: "Spinny Dungeon", winner: false }
+                                ]
+                            },
+                            {
+                                title: "年度最佳肉鸽动作类",
+                                games: [
+                                    { name: "Shape of Dreams（梦之形）", winner: true },
+                                    { name: "Sephiria（赛菲莉娅）", winner: true },
+                                    { name: "绝对魔权", winner: false },
+                                    { name: "球比伦战记", winner: false },
+                                    { name: "虚空破坏者VOIDBREAKER", winner: false },
+                                    { name: "Cursed Blood", winner: false },
+                                    { name: "福西法地牢 Furcifer's Fungeon", winner: false }
+                                ]
+                            },
+                            {
+                                title: "年度卡牌肉鸽",
+                                games: [
+                                    { name: "Monster Train 2（怪物火车2）", winner: true },
+                                    { name: "StarVaders（星之侵略者）", winner: true },
+                                    { name: "FrostBound 凛冬前线", winner: false },
+                                    { name: "Demonic Mahjong 我在地府打麻将", winner: false },
+                                    { name: "Decktamer 驯牌师", winner: false },
+                                    { name: "DiceVaders（骰之侵略者）", winner: false },
+                                    { name: "Shroom and gloom", winner: false },
+                                    { name: "地狱卡牌2", winner: false }
+                                ]
+                            }
+                        ]
+                    },
+                    {
+                        title: "🧩 解密推理与逻辑类",
+                        subcategories: [
+                            {
+                                title: "年度推理解密游戏",
+                                games: [
+                                    { name: "The Roottrees are Dead（鲁特里一家死了）", winner: true },
+                                    { name: "Strange Antiquities", winner: false },
+                                    { name: "Type Help（itch）", winner: false },
+                                    { name: "Duck Detective: The Ghost of Glamping", winner: false },
+                                    { name: "A Case of Fraud", winner: false },
+                                    { name: "The Incident at Galley House", winner: false },
+                                    { name: "Demon Bluff", winner: false },
+                                    { name: "诡岛灵探 - The Occultist", winner: false }
+                                ]
+                            },
+                            {
+                                title: "年度逻辑解密游戏",
+                                games: [
+                                    { name: "Gentoo Rescue", winner: true },
+                                    { name: "Öoo", winner: false },
+                                    { name: "Spooky Express", winner: false },
+                                    { name: "Glowkeeper", winner: false },
+                                    { name: "Lab Rat", winner: false },
+                                    { name: "Number Machine: 数学工厂", winner: false },
+                                    { name: "按钮效应", winner: false }
+                                ]
+                            }
+                        ]
+                    },
+                    {
+                        title: "🗡️ 动作冒险与平台跳跃",
+                        subcategories: [
+                            {
+                                title: "最佳类银河战士恶魔城/类塞尔达",
+                                games: [
+                                    { name: "Pipistrello and the Cursed Yoyo", winner: true },
+                                    { name: "丝之歌", winner: false },
+                                    { name: "ZEXION", winner: false },
+                                    { name: "Auridia 黄金废都", winner: false },
+                                    { name: "Scrabdackle", winner: false },
+                                    { name: "Supraworld", winner: false },
+                                    { name: "Metro Gravity", winner: false },
+                                    { name: "Silver Pines", winner: false },
+                                    { name: "哥布林维克：窃贼大亨", winner: false }
+                                ]
+                            },
+                            {
+                                title: "年度平台动作游戏",
+                                games: [
+                                    { name: "Windswept", winner: true },
+                                    { name: "White Knuckle（白色关节）", winner: true },
+                                    { name: "Haneda Girl", winner: false },
+                                    { name: "Skate Story", winner: false },
+                                    { name: "霰弹警长Shotgun Cop Man", winner: false },
+                                    { name: "ZWAARD", winner: false },
+                                    { name: "壁虎之神", winner: false }
+                                ]
+                            }
+                        ]
+                    },
+                    {
+                        title: "🎭 剧情与角色扮演类",
+                        subcategories: [
+                            {
+                                title: "年度RPG游戏",
+                                games: [
+                                    { name: "Look outside", winner: true },
+                                    { name: "Deltarune", winner: false },
+                                    { name: "苏丹的游戏 Sultan's Game", winner: false },
+                                    { name: "Verho - Curse of Faces", winner: false },
+                                    { name: "Kingdoms of the Dump", winner: false },
+                                    { name: "Spark in the Dark", winner: false },
+                                    { name: "Threads of Time", winner: false }
+                                ]
+                            },
+                            {
+                                title: "年度剧情游戏",
+                                games: [
+                                    { name: "Sultan's Game（苏丹的游戏）", winner: true },
+                                    { name: "三相奇谈", winner: false },
+                                    { name: "Goodnight Universe", winner: false },
+                                    { name: "The drifter", winner: false },
+                                    { name: "Kathy Rain 2 : Soothsayer", winner: false },
+                                    { name: "Old Skies", winner: false },
+                                    { name: "PVKK: Planetenverteidigungskanonenkommandant", winner: false },
+                                    { name: "君王之塔 Sovereign Tower", winner: false }
+                                ]
+                            },
+                            {
+                                title: "年度视觉小说",
+                                games: [
+                                    { name: "再见断刀", winner: true },
+                                    { name: "S4U 都市朋克2011与爱的重拳", winner: false },
+                                    { name: "无罪之庭", winner: false },
+                                    { name: "Z.A.T.O. // I Love the World and Everything In It", winner: false },
+                                    { name: "魔法少女的魔女审判", winner: false },
+                                    { name: "coffee talk tokyo", winner: false },
+                                    { name: "timemoon", winner: false }
+                                ]
+                            }
+                        ]
+                    },
+                    {
+                        title: "♟️ 策略、经营、模拟与其它",
+                        subcategories: [
+                            {
+                                title: "年度策略游戏",
+                                games: [
+                                    { name: "Those Who Rule（统治者之道）", winner: true },
+                                    { name: "Escape The Mad Empire", winner: false },
+                                    { name: "Dark Deity 2", winner: false },
+                                    { name: "Chronicle of Scarlet ~ 绯红编年史~", winner: false },
+                                    { name: "Death Howl 死亡呼啸", winner: false },
+                                    { name: "永无之尽", winner: false },
+                                    { name: "dead weight", winner: false }
+                                ]
+                            },
+                            {
+                                title: "年度多人联机游戏",
+                                games: [
+                                    { name: "PEAK", winner: true },
+                                    { name: "R.E.P.O", winner: false },
+                                    { name: "密室逃脱模拟器2", winner: false },
+                                    { name: "枪豆人", winner: false },
+                                    { name: "Deviation Game", winner: false },
+                                    { name: "Far Far West", winner: false },
+                                    { name: "STARSEEKER: Astroneer Expeditions", winner: false }
+                                ]
+                            },
+                            {
+                                title: "年度优秀治愈小品游戏",
+                                games: [
+                                    { name: "吃语小镇Whisper of the House", winner: false },
+                                    { name: "Cozy Island 舒舒服服的小岛时光", winner: false },
+                                    { name: "Undusted:Letters from the Past", winner: false },
+                                    { name: "keep driving", winner: false },
+                                    { name: "Is This Seat Taken?这个座位有人坐吗？", winner: false },
+                                    { name: "Kabuto Park兜虫公园", winner: false },
+                                    { name: "好商人鲨鲨", winner: false },
+                                    { name: "TOEM 2", winner: false }
+                                ]
+                            },
+                            {
+                                title: "年度优秀模拟经营/种田游戏",
+                                games: [
+                                    { name: "大厨的轮班 The Chef's Shift", winner: false },
+                                    { name: "多洛可小镇Doloc Town", winner: false },
+                                    { name: "Wanderstop", winner: false },
+                                    { name: "酒馆带老板Tavern Keeper", winner: false },
+                                    { name: "小小书店Tiny Bookshop", winner: false },
+                                    { name: "neverway", winner: false },
+                                    { name: "奇想乐园Fantastic Haven", winner: false }
+                                ]
+                            },
+                            {
+                                title: "年度优秀挂机/增量游戏",
+                                games: [
+                                    { name: "咖啡星矿工Astro Prospector", winner: false },
+                                    { name: "Tower Wizard", winner: false },
+                                    { name: "全球鱼友俱乐部：放置好时光Tiny Aquarium", winner: false },
+                                    { name: "龟龟潜海记Shelldiver", winner: false },
+                                    { name: "Eventide Matter", winner: false },
+                                    { name: "巨石岛", winner: false },
+                                    { name: "农庄牌", winner: false }
+                                ]
+                            },
+                            {
+                                title: "年度优秀创意游戏",
+                                games: [
+                                    { name: "Beatblock（音游）", winner: false },
+                                    { name: "奇异拼图 Strange Jigsaws", winner: false },
+                                    { name: "0player（itch）", winner: false },
+                                    { name: "你有饼吗", winner: false },
+                                    { name: "Q-UP", winner: false },
+                                    { name: "Wakey Wakey", winner: false },
+                                    { name: "文字游戏世界", winner: false },
+                                    { name: "布拉斯·库巴斯的死后委托", winner: false }
+                                ]
+                            },
+                            {
+                                title: "年度优秀转正游戏（EA结束转正式版）",
+                                games: [
+                                    { name: "hades2 (哈迪斯2)", winner: false },
+                                    { name: "非生物因素 (Abiotic Factor)", winner: false },
+                                    { name: "动物迷城", winner: false },
+                                    { name: "节奏医生 (Rhythm Doctor)", winner: false },
+                                    { name: "背包乱斗 (Backpack Battles)", winner: false },
+                                    { name: "Dice A Million", winner: false },
+                                    { name: "monomoon", winner: false }
+                                ]
+                            }
+                        ]
+                    }
+                ];
+
+                const categories2025 = [
+                    {
+                        title: "👑 年度独立游戏",
+                        subcategories: [
+                            {
+                                title: "最高大奖提名",
+                                games: [
+                                    { name: "Animal Well (动物井)", winner: true },
+                                    { name: "Balatro (小丑牌)", winner: false },
+                                    { name: "Leap Year (闰跃之年)", winner: false },
+                                    { name: "UFO 50", winner: false },
+                                    { name: "Promenade (漫游奇境)", winner: false }
+                                ]
+                            }
+                        ]
+                    },
+                    {
+                        title: "⚔️ 肉鸽类 (Roguelike)",
+                        subcategories: [
+                            {
+                                title: "年度最佳肉鸽 - 策略类",
+                                games: [
+                                    { name: "Backpack Battles (背包乱斗)", winner: true },
+                                    { name: "LONESTAR (孤星猎人)", winner: true },
+                                    { name: "Slice & Dice (砍杀与骰子)", winner: true },
+                                    { name: "Emberward (余烬守卫)", winner: false },
+                                    { name: "Pyrene", winner: false }
+                                ]
+                            },
+                            {
+                                title: "年度最佳肉鸽 - 动作类",
+                                games: [
+                                    { name: "Hades II (哈迪斯II)", winner: true },
+                                    { name: "Lucky Tower Ultimate (终极幸运这塔)", winner: true },
+                                    { name: "Windblown (风中行者)", winner: false },
+                                    { name: "The Rogue Prince of Persia (波斯王子：Rogue)", winner: false },
+                                    { name: "SULFUR (火湖)", winner: false }
+                                ]
+                            },
+                            {
+                                title: "年度最佳卡牌",
+                                games: [
+                                    { name: "Balatro (小丑牌)", winner: true },
+                                    { name: "DICEOMANCER (骰子浪游者)", winner: true },
+                                    { name: "Card-en-Ciel (天穹卡牌录)", winner: false },
+                                    { name: "SpellRogue", winner: false },
+                                    { name: ".Forty-Five", winner: false }
+                                ]
+                            },
+                            {
+                                title: "年度传统类Rogue",
+                                games: [
+                                    { name: "Elin", winner: true },
+                                    { name: "Rift Wizard 2 (裂隙巫师2)", winner: false },
+                                    { name: "Path of Achra", winner: false },
+                                    { name: "Caves of Qud (卡德洞窟)", winner: false },
+                                    { name: "Subterrain: Mines of Titan", winner: false }
+                                ]
+                            }
+                        ]
+                    },
+                    {
+                        title: "🧩 解密与逻辑类",
+                        subcategories: [
+                            {
+                                title: "年度最佳推理解迷",
+                                games: [
+                                    { name: "The Rise of the Golden Idol (金偶像崛起)", winner: true },
+                                    { name: "No Case Should Remain Unsolved (尘埃终须落定)", winner: false },
+                                    { name: "The Operator (接线疑云)", winner: false },
+                                    { name: "Murders on the Yangtze River (山河旅探)", winner: false },
+                                    { name: "DAEMON MASQUERADE (恶魔假面舞会)", winner: false }
+                                ]
+                            },
+                            {
+                                title: "年度最佳逻辑解迷",
+                                games: [
+                                    { name: "Maxwell's puzzling demon", winner: true },
+                                    { name: "LOK Digital", winner: false },
+                                    { name: "Leaf's Odyssey", winner: false },
+                                    { name: "14 Minesweeper Variants 2 (14种扫雷变体2)", winner: false },
+                                    { name: "Stig", winner: false },
+                                    { name: "Star Stuff", winner: false }
+                                ]
+                            }
+                        ]
+                    },
+                    {
+                        title: "🗡️ 动作冒险与平台跳跃",
+                        subcategories: [
+                            {
+                                title: "年度类银河城 (Metroidvania)",
+                                games: [
+                                    { name: "Minishoot' Adventures (小飞船大冒险)", winner: true },
+                                    { name: "Crypt Custodian (冥界清道夫)", winner: false },
+                                    { name: "Moonlight Pulse", winner: false },
+                                    { name: "BioGun (生物枪)", winner: false },
+                                    { name: "BIOMORPH (化形站士)", winner: false }
+                                ]
+                            },
+                            {
+                                title: "年度最佳平台动作游戏",
+                                games: [
+                                    { name: "Promenade (漫游奇境)", winner: true },
+                                    { name: "Grapple Dogs: Cosmic Canines (狗钩: 宇宙狗狗)", winner: false },
+                                    { name: "Fallen Leaf", winner: false },
+                                    { name: "DECLINE'S DROPS", winner: false },
+                                    { name: "Antonblast", winner: false }
+                                ]
+                            }
+                        ]
+                    },
+                    {
+                        title: "🎭 剧情与角色扮演类",
+                        subcategories: [
+                            {
+                                title: "年度最佳RPG",
+                                games: [
+                                    { name: "Drova - Forsaken Kin", winner: true },
+                                    { name: "Arco", winner: false },
+                                    { name: "Monomyth", winner: false },
+                                    { name: "Keylocker", winner: false },
+                                    { name: "Beastieball (野兽排球)", winner: false }
+                                ]
+                            },
+                            {
+                                title: "年度剧情游戏",
+                                games: [
+                                    { name: "Break your mind (沉没意志)", winner: true },
+                                    { name: "Until Then (直到那时)", winner: false },
+                                    { name: "Thank Goodness You're Here!", winner: false },
+                                    { name: "Midnight Scenes: A Safe Place", winner: false },
+                                    { name: "Mothwashing (缄默祸运)", winner: false }
+                                ]
+                            }
+                        ]
+                    },
+                    {
+                        title: "♟️ 策略与多人游戏",
+                        subcategories: [
+                            {
+                                title: "年度最佳策略游戏",
+                                games: [
+                                    { name: "Tactical Breach Wizards (战术突破巫师)", winner: true },
+                                    { name: "Cataclismo (灾厄堡垒)", winner: false },
+                                    { name: "SteamWorld Heist II", winner: false },
+                                    { name: "Kingdom Rush 5: Alliance (王国保卫战5联盟)", winner: false },
+                                    { name: "Our Adventurer Guild", winner: false }
+                                ]
+                            },
+                            {
+                                title: "年度多人游戏",
+                                games: [
+                                    { name: "Abiotic Factor (非生物因子)", winner: true },
+                                    { name: "Liar's Bar (骗子酒吧)", winner: false },
+                                    { name: "Chained Together (连锁在一起)", winner: false },
+                                    { name: "Rabbit and Steel (兔子与钢铁)", winner: false },
+                                    { name: "KLETKA (笼子)", winner: false }
+                                ]
+                            }
+                        ]
+                    },
+                    {
+                        title: "🎨 艺术、恐怖与其他",
+                        subcategories: [
+                            {
+                                title: "年度最佳艺术",
+                                games: [
+                                    { name: "Neva", winner: false },
+                                    { name: "Lorelei and the Laser Eyes", winner: false },
+                                    { name: "INDIKA", winner: false },
+                                    { name: "Harold Halibut", winner: false },
+                                    { name: "Death of the Reprobate", winner: false }
+                                ]
+                            },
+                            {
+                                title: "年度恐怖游戏",
+                                games: [
+                                    { name: "MiSide (米塔)", winner: true },
+                                    { name: "Withering Rooms (凋零房间)", winner: false },
+                                    { name: "Crow Country (乌鸦国度)", winner: false },
+                                    { name: "Enigma of Fear (恐惧之迷)", winner: false },
+                                    { name: "CONSCRIT (站壕惊魂)", winner: false }
+                                ]
+                            },
+                            {
+                                title: "年度FPS游戏",
+                                games: [
+                                    { name: "Echo Point Nova", winner: true },
+                                    { name: "Fallen Aces", winner: false },
+                                    { name: "I Am Your Beast", winner: false },
+                                    { name: "MULLET MADJACK", winner: false },
+                                    { name: "ROBOBEAT", winner: false }
+                                ]
+                            }
+                        ]
+                    },
+                    {
+                        title: "🌟 特别奖项",
+                        subcategories: [
+                            {
+                                title: "年度小品游戏",
+                                games: [
+                                    { name: "Grunn", winner: true },
+                                    { name: "Awaria", winner: false },
+                                    { name: "Sheepy: A Short Adventure", winner: false },
+                                    { name: "Buckshot Roulette (恶魔轮盘)", winner: false },
+                                    { name: "Arctic Eggs (极地煎蛋)", winner: false }
+                                ]
+                            },
+                            {
+                                title: "年度休闲游戏",
+                                games: [
+                                    { name: "Webfishing", winner: true },
+                                    { name: "Rusty's Retirement", winner: false },
+                                    { name: "Chef RPG", winner: false },
+                                    { name: "Coffee Caravan", winner: false },
+                                    { name: "Fields of Mistria", winner: false }
+                                ]
+                            },
+                            {
+                                title: "年度最佳转正式版",
+                                games: [
+                                    { name: "BlazBlue Entropy Effect (苍翼混沌效应)", winner: false },
+                                    { name: "Satisfactory (幸福工厂)", winner: false },
+                                    { name: "Nova Drift (新星漂移)", winner: false },
+                                    { name: "Thronefall (王权陨落)", winner: false },
+                                    { name: "Secrets of Grindea", winner: false }
+                                ]
+                            },
+                            {
+                                title: "年度最佳创意",
+                                games: [
+                                    { name: "Leap Year (闰跃之年)", winner: true },
+                                    { name: "WindowKill", winner: false },
+                                    { name: "Mimic Logic", winner: false },
+                                    { name: "4D Golf", winner: false },
+                                    { name: "Gryptmaster", winner: false }
+                                ]
+                            }
+                        ]
+                    }
+                ];
+
+                const categories2024 = [
+                    {
+                        title: "👑 年度独立游戏",
+                        subcategories: [
+                            {
+                                title: "“硬选”最佳独立",
+                                games: [
+                                    { name: "披萨塔", winner: true }
+                                ]
+                            }
+                        ]
+                    },
+                    {
+                        title: "⚔️ 肉鸽类 (Roguelike)",
+                        subcategories: [
+                            {
+                                title: "动作肉鸽",
+                                games: [
+                                    { name: "圣婴降临", winner: false },
+                                    { name: "星界战士", winner: true },
+                                    { name: "voidigo", winner: false },
+                                    { name: "苍翼混沌效应", winner: false },
+                                    { name: "湮灭线", winner: false },
+                                    { name: "余烬骑士", winner: false }
+                                ]
+                            },
+                            {
+                                title: "策略肉鸽",
+                                games: [
+                                    { name: "最后的咒语", winner: false },
+                                    { name: "墨迹边界", winner: false },
+                                    { name: "幸运房东", winner: false },
+                                    { name: "将军对决", winner: false },
+                                    { name: "风暴之城", winner: true },
+                                    { name: "轮作法", winner: false }
+                                ]
+                            }
+                        ]
+                    },
+                    {
+                        title: "♟️ 策略与卡牌",
+                        subcategories: [
+                            {
+                                title: "最佳策略",
+                                games: [
+                                    { name: "王权陨落", winner: false },
+                                    { name: "影子诡局：被诅咒的海盗", winner: true },
+                                    { name: "战争传说", winner: false },
+                                    { name: "碎片朋克", winner: false },
+                                    { name: "dotAGE", winner: false },
+                                    { name: "改造火星", winner: false }
+                                ]
+                            },
+                            {
+                                title: "最佳卡牌",
+                                games: [
+                                    { name: "阿斯特莱亚", winner: true },
+                                    { name: "钴蓝核心", winner: false },
+                                    { name: "冥狱战术", winner: false },
+                                    { name: "王牌与冒险", winner: false },
+                                    { name: "漫游者", winner: false },
+                                    { name: "雪居之地（他还是忘不了）", winner: false }
+                                ]
+                            }
+                        ]
+                    },
+                    {
+                        title: "🧩 解密与创意",
+                        subcategories: [
+                            {
+                                title: "最佳创意",
+                                games: [
+                                    { name: "取景器", winner: false },
+                                    { name: "巴别塔圣歌", winner: false },
+                                    { name: "幸运房东", winner: false },
+                                    { name: "传送蛇", winner: false },
+                                    { name: "茧", winner: false },
+                                    { name: "你只用忙", winner: true }
+                                ]
+                            },
+                            {
+                                title: "最佳解谜",
+                                games: [
+                                    { name: "塔罗斯的法则2", winner: false },
+                                    { name: "蠕虫铁罐", winner: true },
+                                    { name: "抓兔子", winner: true },
+                                    { name: "茧", winner: false },
+                                    { name: "丑陋", winner: false },
+                                    { name: "魔法箱子", winner: false },
+                                    { name: "取景器", winner: false },
+                                    { name: "建与远征", winner: false }
+                                ]
+                            }
+                        ]
+                    },
+                    {
+                        title: "🗡️ 动作冒险与平台跳跃",
+                        subcategories: [
+                            {
+                                title: "最佳银河城",
+                                games: [
+                                    { name: "莱卡：鲜血铸就", winner: false },
+                                    { name: "神之亵渎2", winner: true },
+                                    { name: "tevi", winner: false },
+                                    { name: "鲜血地狱", winner: false },
+                                    { name: "空无世界", winner: false },
+                                    { name: "好狗狗星系", winner: true }
+                                ]
+                            },
+                            {
+                                title: "最佳动作",
+                                games: [
+                                    { name: "重力回路", winner: false },
+                                    { name: "击剑预备", winner: false },
+                                    { name: "退潮", winner: false },
+                                    { name: "Bzzzt", winner: false },
+                                    { name: "披萨塔", winner: true },
+                                    { name: "萌芽", winner: false }
+                                ]
+                            }
+                        ]
+                    },
+                    {
+                        title: "🎭 剧情与角色扮演类",
+                        subcategories: [
+                            {
+                                title: "最佳RPG",
+                                games: [
+                                    { name: "动物迷城", winner: false },
+                                    { name: "磁带妖怪", winner: false },
+                                    { name: "魔女之泉r", winner: false },
+                                    { name: "逸剑风云决", winner: true },
+                                    { name: "恐怖的世界", winner: false },
+                                    { name: "lunacid", winner: false }
+                                ]
+                            },
+                            {
+                                title: "最佳剧情",
+                                games: [
+                                    { name: "无垠之心", winner: false },
+                                    { name: "宇宙之轮姐妹会", winner: false },
+                                    { name: "杀死公主", winner: true },
+                                    { name: "狼奔豕突2", winner: false },
+                                    { name: "咖啡心语2", winner: false },
+                                    { name: "巴别号漫游指南", winner: false },
+                                    { name: "梅格与怪物", winner: false },
+                                    { name: "闪避刺客", winner: false }
+                                ]
+                            }
+                        ]
+                    },
+                    {
+                        title: "🎮 多人、休闲与FPS",
+                        subcategories: [
+                            {
+                                title: "最佳多人",
+                                games: [
+                                    { name: "雨中冒险：回归", winner: false },
+                                    { name: "致命公司", winner: true },
+                                    { name: "潜渊症", winner: false },
+                                    { name: "逃生试炼", winner: false },
+                                    { name: "森林之子", winner: false },
+                                    { name: "史莱姆竞技场", winner: false }
+                                ]
+                            },
+                            {
+                                title: "最佳休闲",
+                                games: [
+                                    { name: "诺普的故事（放置）", winner: false },
+                                    { name: "渔帆暗涌（冒险）", winner: false },
+                                    { name: "蜜蜂碳化（轻策）", winner: false },
+                                    { name: "火山的女儿（养成）", winner: false },
+                                    { name: "方寸文明（三消）", winner: false },
+                                    { name: "鼠托邦（城建）", winner: false },
+                                    { name: "太阳港（种田）", winner: false },
+                                    { name: "疯狂游戏大亨2（经营）", winner: false },
+                                    { name: "小小贴纸铺（治愈）", winner: false },
+                                    { name: "水族箱（收集）", winner: false }
+                                ]
+                            },
+                            {
+                                title: "最佳FPS",
+                                games: [
+                                    { name: "杀虫", winner: false },
+                                    { name: "涡轮超杀", winner: false },
+                                    { name: "机器人任务", winner: true },
+                                    { name: "HROT", winner: false },
+                                    { name: "血色西部", winner: false },
+                                    { name: "zortch", winner: false }
+                                ]
+                            }
+                        ]
+                    }
+                ];
+
+
+                const currentCategories = computed(() => {
+                    if (currentYear.value === 2026) return categories2026;
+                    if (currentYear.value === 2025) return categories2025;
+                    return categories2024;
+                });
+
+                const filteredCategories = computed(() => {
+                    if (!searchQuery.value) return currentCategories.value;
+                    const query = searchQuery.value.toLowerCase();
+                    
+                    return currentCategories.value.map(cat => {
+                        const filteredSubs = cat.subcategories.map(sub => {
+                            return {
+                                ...sub,
+                                games: sub.games.filter(g => g.name.toLowerCase().includes(query))
+                            };
+                        }).filter(sub => sub.games.length > 0);
+
+                        if (filteredSubs.length > 0 || cat.title.toLowerCase().includes(query)) {
+                            return { ...cat, subcategories: filteredSubs };
+                        }
+                        return null;
+                    }).filter(Boolean);
+                });
+
+                const scrollToCat = (title) => {
+                    activeCategory.value = title;
+                    const el = document.getElementById('cat-' + title);
+                    if (el) {
+                        const mainScroll = document.getElementById('main-scroll');
+                        mainScroll.scrollTo({
+                            top: el.offsetTop - 20,
+                            behavior: 'smooth'
+                        });
+                    }
+                };
+
+                const getSteamLink = (name) => {
+                    let cleanName = name.split('（')[0].split('(')[0].trim();
+                    return `https://store.steampowered.com/search/?term=${encodeURIComponent(cleanName)}`;
+                };
+
+                onMounted(() => {
+                    const observer = new IntersectionObserver((entries) => {
+                        entries.forEach(entry => {
+                            if (entry.isIntersecting) {
+                                activeCategory.value = entry.target.id.replace('cat-', '');
+                            }
+                        });
+                    }, { rootMargin: '-10% 0px -80% 0px' });
+                    
+                    setTimeout(() => {
+                        document.querySelectorAll('.category-section').forEach(el => observer.observe(el));
+                    }, 500);
+                });
+
+                return {
+                    searchQuery,
+                    currentYear,
+                    categories: currentCategories, // Expose the dynamic list as 'categories' for the template
+                    filteredCategories,
+                    activeCategory,
+                    scrollToCat,
+                    getSteamLink
+                };
+            }
+        }).mount('#app');
+    </script>
+</body>
+</html>
