@@ -1,0 +1,2096 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Word Vine (单词长青)</title>
+    <style>
+        body, html {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            background-color: #121212; /* 深色极简背景 */
+            font-family: 'Courier New', Courier, monospace; /* 极简等宽字体 */
+            touch-action: none; /* 禁用默认触摸行为，如双击缩放 */
+        }
+        #gameCanvas {
+            display: block;
+            width: 100%;
+            height: 100%;
+        }
+        #uiLayer {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none; /* 让点击穿透到 Canvas */
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            padding: 10px 14px;
+            box-sizing: border-box;
+            color: rgba(255, 255, 255, 0.8);
+        }
+        .top-bar {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            font-size: 14px;
+            font-weight: bold;
+            text-shadow: 0 0 10px rgba(255, 255, 255, 0.5);
+            gap: 8px;
+        }
+        #meaningDisplay {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            color: #fff;
+            text-shadow: 0 0 20px rgba(255, 255, 255, 0.8);
+            opacity: 0;
+            transition: opacity 0.3s ease;
+            text-align: center;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 10px;
+        }
+        #meaningDisplay .word {
+            font-size: 64px;
+            font-weight: bold;
+            color: #4CAF50;
+            letter-spacing: 5px;
+        }
+        #meaningDisplay .meaning {
+            font-size: 36px;
+            font-weight: normal;
+        }
+        .show-meaning {
+            opacity: 1 !important;
+        }
+        
+        /* 动态进度条 (The Growth Gauge) */
+        #progressGauge {
+            position: absolute;
+            left: 20px;
+            top: 50%;
+            transform: translateY(-50%);
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+            z-index: 5;
+        }
+        .gauge-dot {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            border: 2px solid rgba(255, 255, 255, 0.3);
+            background: transparent;
+            transition: all 0.3s ease;
+        }
+        .gauge-dot.completed {
+            background: #4CAF50;
+            border-color: #4CAF50;
+            box-shadow: 0 0 10px #4CAF50;
+        }
+        .gauge-dot.current {
+            border-color: #fff;
+            animation: breathe 1.5s infinite alternate;
+        }
+        @keyframes breathe {
+            0% { transform: scale(1); box-shadow: 0 0 5px rgba(255,255,255,0.5); }
+            100% { transform: scale(1.5); box-shadow: 0 0 15px rgba(255,255,255,1); }
+        }
+
+        /* 结算卡片 */
+        #settlementCard {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: rgba(20, 20, 20, 0.9);
+            border: 1px solid #4CAF50;
+            border-radius: 10px;
+            padding: 40px;
+            text-align: center;
+            color: white;
+            z-index: 15;
+            box-shadow: 0 0 30px rgba(76, 175, 80, 0.3);
+        }
+        #settlementCard.hidden {
+            display: none;
+        }
+        
+        /* 菜单样式 */
+        #menuLayer {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(18, 18, 18, 0.95);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            z-index: 10;
+        }
+        .menu-box {
+            background: #222;
+            padding: 30px;
+            border-radius: 10px;
+            border: 1px solid #4CAF50;
+            width: 80%;
+            max-width: 500px;
+            text-align: center;
+        }
+        textarea {
+            width: 100%;
+            height: 150px;
+            background: #111;
+            color: #4CAF50;
+            border: 1px solid #333;
+            padding: 10px;
+            font-family: monospace;
+            margin-bottom: 10px;
+            box-sizing: border-box;
+        }
+        button {
+            background: #4CAF50;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            font-size: 16px;
+            cursor: pointer;
+            border-radius: 5px;
+            margin: 5px;
+            font-family: inherit;
+        }
+        button:hover {
+            background: #45a049;
+        }
+        select {
+            padding: 10px;
+            font-size: 16px;
+            background: #111;
+            color: white;
+            border: 1px solid #4CAF50;
+            border-radius: 5px;
+            margin-bottom: 20px;
+            width: 100%;
+        }
+        .hidden {
+            display: none !important;
+        }
+        
+        /* 强制记忆层样式 */
+        .overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.95);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            z-index: 20;
+        }
+        .overlay-content {
+            background: #222;
+            padding: 30px;
+            border-radius: 10px;
+            border: 1px solid #4CAF50;
+            text-align: center;
+            max-width: 80%;
+        }
+        .overlay-btn {
+            background: #4CAF50;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            font-size: 16px;
+            border-radius: 5px;
+            cursor: pointer;
+            margin: 10px;
+            font-family: 'Courier New', Courier, monospace;
+        }
+        .overlay-btn.secondary {
+            background: #555;
+        }
+        .overlay-btn:hover {
+            opacity: 0.9;
+        }
+        #memorizeOverlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.95);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            z-index: 20;
+        }
+
+        @media (orientation: portrait) {
+            .overlay-content {
+                padding: 20px 16px;
+                max-width: 90%;
+            }
+            .overlay-content h2 {
+                font-size: 18px;
+            }
+            .overlay-content p {
+                font-size: 14px;
+            }
+            .overlay-btn {
+                font-size: 14px;
+                padding: 8px 16px;
+            }
+            #quickMemoList {
+                font-size: 14px !important;
+                line-height: 1.6 !important;
+            }
+            #memorizeOverlay h2 {
+                font-size: 22px;
+            }
+            #memorizeOverlay #memoWord {
+                font-size: 36px;
+            }
+            #memorizeOverlay #memoMeaning {
+                font-size: 22px;
+            }
+            #memorizeOverlay #memoCountdown {
+                font-size: 40px;
+            }
+            #settlementCard {
+                padding: 24px;
+            }
+            #settlementCard h2 {
+                font-size: 20px;
+            }
+            #settlementCard p {
+                font-size: 16px;
+            }
+        }
+
+        @media (orientation: portrait) and (max-width: 414px) {
+            #quickMemoList {
+                font-size: 12px !important;
+                line-height: 1.5 !important;
+            }
+            .overlay-content {
+                padding: 14px 12px;
+            }
+            #memorizeOverlay #memoWord {
+                font-size: 28px;
+            }
+            #memorizeOverlay #memoMeaning {
+                font-size: 18px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <canvas id="gameCanvas"></canvas>
+    
+    <!-- 菜单层 -->
+    <div id="menuLayer">
+        <div class="menu-box">
+            <h1 style="color: #4CAF50; margin-top: 0;">Word Vine</h1>
+            
+            <h3>选择词库</h3>
+            <div style="display: flex; gap: 10px; width: 100%; margin-bottom: 20px;">
+                <select id="dictSelect" style="margin-bottom: 0; flex-grow: 1;"></select>
+                <button id="resetDictBtn" style="background: #ff9800; margin: 0;">重置</button>
+                <button id="deleteDictBtn" style="background: #f44336; margin: 0;">删除</button>
+            </div>
+            <button id="startBtn">开始游戏</button>
+            
+            <hr style="border-color: #333; margin: 20px 0;">
+            
+            <h3>导入新词库 (JSON)</h3>
+            <p style="font-size: 12px; color: #aaa; text-align: left;">格式: {"apple": "苹果", "tree": "树"}</p>
+            <input type="text" id="dictNameInput" placeholder="词库名称 (如: CET4)" style="width: 100%; padding: 10px; margin-bottom: 10px; box-sizing: border-box; background: #111; color: white; border: 1px solid #333;">
+            <textarea id="importData" placeholder='{"word": "meaning"}'></textarea>
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 10px;">
+                <input type="file" id="fileInput" accept=".json" style="display: none;">
+                <button id="loadFileBtn" style="background: #333; border: 1px solid #555;">从文件加载</button>
+                <button id="importBtn">保存并导入</button>
+            </div>
+            <div id="importMsg" style="color: #f44336; font-size: 14px; margin-top: 10px;"></div>
+        </div>
+    </div>
+
+    <div id="uiLayer" class="hidden">
+        <div class="top-bar">
+            <div style="display: flex; flex-direction: column; align-items: flex-start; min-width: 50px;">
+                <div id="scoreDisplay" style="font-size: 16px;">0</div>
+                <div id="comboDisplay" style="font-size: 12px; color: #aaa; margin-top: 2px;">x1</div>
+            </div>
+            <div style="flex-grow: 1; text-align: center; display: flex; flex-direction: column; align-items: center; gap: 2px;">
+                <div id="selectedLettersDisplay" style="font-size: 14px; color: #fff; letter-spacing: 2px; font-weight: bold; text-shadow: 0 0 10px rgba(76,175,80,0.6); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 60vw;"></div>
+                <div id="currentMeaningDisplay" style="font-size: 13px; color: #4CAF50;"></div>
+            </div>
+            <div id="progressDisplay" style="font-size: 12px; color: #aaa; min-width: 50px; text-align: right;">0/0</div>
+        </div>
+        <div id="meaningDisplay"></div>
+        <div id="progressGauge"></div>
+        <button id="exitBtn" style="position: absolute; bottom: 20px; left: 20px; pointer-events: auto; background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.3); color: #aaa; padding: 8px 14px; font-size: 14px; border-radius: 20px; cursor: pointer; font-family: inherit;" onclick="confirmExit()">↩ 退出</button>
+        <button id="statsBtn" style="position: absolute; bottom: 20px; right: 20px; pointer-events: auto; background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.3); color: #aaa; padding: 8px 14px; font-size: 14px; border-radius: 20px; cursor: pointer; font-family: inherit;" onclick="showDailyStats()">📊 今日统计</button>
+    </div>
+
+    <!-- 每日统计浮层 -->
+    <div id="dailyStatsOverlay" class="overlay hidden">
+        <div class="overlay-content" style="min-width: 260px; width: 75%; max-width: 400px;">
+            <h2 style="color: #4CAF50; margin-top: 0; margin-bottom: 20px;">📊 今日统计</h2>
+            <div style="text-align: left; font-size: 18px; line-height: 2.2;">
+                <div style="display: flex; justify-content: space-between;"><span>完成单词</span><span id="statWords" style="color: #4CAF50; font-weight: bold;">0</span></div>
+                <div style="display: flex; justify-content: space-between;"><span>错误次数</span><span id="statMistakes" style="color: #ff9800; font-weight: bold;">0</span></div>
+                <div style="display: flex; justify-content: space-between;"><span>死亡次数</span><span id="statDeaths" style="color: #f44336; font-weight: bold;">0</span></div>
+            </div>
+            <button class="overlay-btn" style="width: 100%; margin-top: 20px;" onclick="hideDailyStats()">关闭</button>
+        </div>
+    </div>
+
+    <!-- 结算卡片 -->
+    <div id="settlementCard" class="hidden">
+        <h2 id="settlementTitle" style="color: #4CAF50; margin-top: 0;">Cluster Complete</h2>
+        <p id="settlementStats" style="font-size: 24px; margin: 20px 0;">Accuracy: 100%</p>
+        <p style="font-size: 14px; color: #aaa;">Press Space to continue</p>
+    </div>
+
+    <!-- 快速记忆询问层 -->
+    <div id="quickMemoPromptOverlay" class="overlay hidden">
+        <div class="overlay-content">
+            <h2 style="color: #4CAF50; margin-top: 0;">新的一组单词即将开始</h2>
+            <p style="font-size: 18px; margin: 20px 0; color: #ccc;">是否需要先快速浏览并记忆本组单词？</p>
+            <div style="display: flex; justify-content: center; gap: 20px;">
+                <button id="btnQuickMemoYes" class="overlay-btn">需要记忆 (Y)</button>
+                <button id="btnQuickMemoNo" class="overlay-btn secondary">直接开始 (N)</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 快速记忆展示层 -->
+    <div id="quickMemoDisplayOverlay" class="overlay hidden">
+        <div class="overlay-content" style="max-width: 600px; width: 80%;">
+            <h2 style="color: #4CAF50; margin-top: 0; border-bottom: 1px solid #333; padding-bottom: 10px;">本组单词预览</h2>
+            <div id="quickMemoList" style="text-align: left; margin: 15px 0; max-height: 55vh; overflow-y: auto; font-size: 20px; line-height: 1.8;">
+                <!-- 单词列表将在这里动态生成 -->
+            </div>
+            <button id="btnQuickMemoDone" class="overlay-btn" style="width: 100%;">我记住了，开始挑战 (Space)</button>
+        </div>
+    </div>
+
+    <!-- 强制记忆层 -->
+    <div id="memorizeOverlay" class="overlay hidden">
+        <h2 style="color: #f44336; font-size: 32px; margin-bottom: 10px;">错误次数过多，请强制记忆！</h2>
+        <div id="memoWord" style="font-size: 64px; color: #4CAF50; font-weight: bold; letter-spacing: 5px; margin: 20px 0;"></div>
+        <div id="memoMeaning" style="font-size: 36px; margin-bottom: 40px;"></div>
+        <div id="memoCountdown" style="font-size: 64px; font-weight: bold; color: #ff9800;">10</div>
+    </div>
+
+    <script>
+        // --- 1. 初始化 Canvas ---
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        
+        let width, height;
+        let gameStateReady = false;
+        
+        function resize() {
+            const prevWidth = width;
+            const prevHeight = height;
+            width = window.innerWidth;
+            height = window.innerHeight;
+            canvas.width = width;
+            canvas.height = height;
+
+            if (gameStateReady && Number.isFinite(prevWidth) && Number.isFinite(prevHeight)) {
+                adjustTreePositionOnResize(prevWidth, prevHeight, width, height);
+            }
+        }
+        
+        window.addEventListener('resize', resize);
+        resize();
+
+        // --- 2. 核心数据与状态管理 ---
+
+        // --- 音效系统：巴赫 Cello Suite No.1 Prélude ---
+        let audioCtx = null;
+        let preludeIndex = 0;
+        const preludeNotes = [
+            // Measure 1-2: G major arpeggio pattern
+            98.00, 146.83, 246.94, 220.00, 246.94, 146.83, 246.94, 146.83,
+            98.00, 146.83, 246.94, 220.00, 246.94, 146.83, 246.94, 146.83,
+            // Measure 3-4: C major / Am
+            110.00, 164.81, 261.63, 246.94, 261.63, 164.81, 261.63, 164.81,
+            110.00, 164.81, 261.63, 246.94, 261.63, 164.81, 261.63, 164.81,
+            // Measure 5-6: D major
+            123.47, 146.83, 246.94, 220.00, 246.94, 146.83, 246.94, 146.83,
+            130.81, 164.81, 220.00, 196.00, 220.00, 164.81, 220.00, 164.81,
+            // Measure 7-8: G -> D7
+            123.47, 146.83, 196.00, 174.61, 196.00, 146.83, 196.00, 146.83,
+            98.00, 123.47, 174.61, 146.83, 174.61, 123.47, 174.61, 123.47,
+            // Measure 9-10
+            98.00, 146.83, 246.94, 220.00, 246.94, 146.83, 246.94, 146.83,
+            98.00, 164.81, 261.63, 246.94, 261.63, 164.81, 261.63, 164.81,
+            // Measure 11-12: rising line
+            110.00, 185.00, 293.66, 261.63, 293.66, 185.00, 293.66, 185.00,
+            146.83, 220.00, 293.66, 261.63, 293.66, 220.00, 293.66, 220.00,
+        ];
+
+        function ensureAudioCtx() {
+            if (!audioCtx) {
+                audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            }
+            if (audioCtx.state === 'suspended') {
+                audioCtx.resume();
+            }
+        }
+
+        function playCelloNote(freq, duration = 0.25) {
+            ensureAudioCtx();
+            const t = audioCtx.currentTime;
+
+            // 基频 + 泛音模拟大提琴
+            const gains = [1, 0.5, 0.3, 0.15, 0.08];
+            const masterGain = audioCtx.createGain();
+            masterGain.gain.setValueAtTime(0, t);
+            masterGain.gain.linearRampToValueAtTime(0.15, t + 0.02);
+            masterGain.gain.setValueAtTime(0.15, t + duration * 0.5);
+            masterGain.gain.exponentialRampToValueAtTime(0.001, t + duration);
+            masterGain.connect(audioCtx.destination);
+
+            gains.forEach((g, i) => {
+                const osc = audioCtx.createOscillator();
+                const oscGain = audioCtx.createGain();
+                osc.type = i === 0 ? 'sawtooth' : 'triangle';
+                osc.frequency.setValueAtTime(freq * (i + 1), t);
+                oscGain.gain.setValueAtTime(g * 0.3, t);
+                osc.connect(oscGain);
+                oscGain.connect(masterGain);
+                osc.start(t);
+                osc.stop(t + duration + 0.05);
+            });
+        }
+
+        function playCorrectNote() {
+            const freq = preludeNotes[preludeIndex % preludeNotes.length];
+            preludeIndex++;
+            playCelloNote(freq, 0.22);
+        }
+
+        function playWrongNote() {
+            ensureAudioCtx();
+            playCelloNote(73.42, 0.35); // D2 低沉
+        }
+
+        function playCompleteChord() {
+            playCelloNote(196.00, 0.5);
+            setTimeout(() => playCelloNote(246.94, 0.5), 80);
+            setTimeout(() => playCelloNote(293.66, 0.6), 160);
+        }
+
+        function playAutoClick() {
+            ensureAudioCtx();
+            const t = audioCtx.currentTime;
+            const osc = audioCtx.createOscillator();
+            const gain = audioCtx.createGain();
+            osc.type = 'sine';
+            osc.frequency.value = 1200;
+            gain.gain.setValueAtTime(0.03, t);
+            gain.gain.exponentialRampToValueAtTime(0.001, t + 0.04);
+            osc.connect(gain);
+            gain.connect(audioCtx.destination);
+            osc.start(t);
+            osc.stop(t + 0.04);
+        }
+
+        function speakWordPhrase(text) {
+            if (!('speechSynthesis' in window)) return;
+            const value = String(text || '').trim();
+            if (!value) return;
+            const spoken = value
+                .replace(/\bsth\./gi, 'something')
+                .replace(/\bsb\./gi, 'somebody');
+            window.speechSynthesis.cancel();
+            const utterance = new SpeechSynthesisUtterance(spoken);
+            utterance.lang = 'en-US';
+            utterance.rate = 0.95;
+            utterance.pitch = 1;
+            utterance.volume = 1;
+            window.speechSynthesis.speak(utterance);
+        }
+
+        let dictionaries = {};
+        
+        let currentDictionary = null;
+        let currentDictName = '';
+
+        function getLearningProgress(dictName) {
+            const saved = localStorage.getItem('wordVineProgress');
+            if (!saved) return {};
+            try {
+                const all = JSON.parse(saved);
+                return all[dictName] || {};
+            } catch(e) { return {}; }
+        }
+
+        function markWordLearned(dictName, word) {
+            let all = {};
+            const saved = localStorage.getItem('wordVineProgress');
+            if (saved) { try { all = JSON.parse(saved); } catch(e) {} }
+            if (!all[dictName]) all[dictName] = {};
+            all[dictName][word] = Date.now();
+            localStorage.setItem('wordVineProgress', JSON.stringify(all));
+        }
+
+        function getLearnedCount(dictName) {
+            const prog = getLearningProgress(dictName);
+            return Object.keys(prog).length;
+        }
+
+        function clearLearningProgress(dictName) {
+            let all = {};
+            const saved = localStorage.getItem('wordVineProgress');
+            if (saved) { try { all = JSON.parse(saved); } catch(e) {} }
+            delete all[dictName];
+            localStorage.setItem('wordVineProgress', JSON.stringify(all));
+        }
+
+        // 加载本地缓存的词库
+        function loadDictionaries() {
+            const saved = localStorage.getItem('wordVineDicts');
+            if (saved) {
+                try {
+                    const parsed = JSON.parse(saved);
+                    dictionaries = parsed;
+                } catch (e) {
+                    console.error("Failed to load dictionaries", e);
+                }
+            }
+            updateDictSelect();
+        }
+
+        // 更新下拉菜单
+        function updateDictSelect() {
+            const select = document.getElementById('dictSelect');
+            select.innerHTML = '';
+            for (const name in dictionaries) {
+                const option = document.createElement('option');
+                option.value = name;
+                const learned = getLearnedCount(name);
+                const total = dictionaries[name].length;
+                option.textContent = `${name} (${learned}/${total})`;
+                select.appendChild(option);
+            }
+        }
+
+        // 导入新词库
+        document.getElementById('importBtn').addEventListener('click', () => {
+            const nameInput = document.getElementById('dictNameInput').value.trim();
+            const dataInput = document.getElementById('importData').value.trim();
+            const msgDiv = document.getElementById('importMsg');
+            
+            if (!nameInput) {
+                msgDiv.textContent = "请输入词库名称";
+                msgDiv.style.color = "#f44336";
+                return;
+            }
+            if (!dataInput) {
+                msgDiv.textContent = "请输入JSON数据";
+                msgDiv.style.color = "#f44336";
+                return;
+            }
+
+            try {
+                const parsedData = JSON.parse(dataInput);
+                const newDict = [];
+                
+                // 验证并转换格式
+                for (const key in parsedData) {
+                    if (typeof key === 'string' && typeof parsedData[key] === 'string') {
+                        const trimmed = key.trim();
+                        if (trimmed.length > 0 && /[a-zA-Z]/.test(trimmed)) {
+                            newDict.push({ word: trimmed, meaning: parsedData[key] });
+                        }
+                    }
+                }
+
+                if (newDict.length === 0) {
+                    throw new Error("没有找到有效的单词数据");
+                }
+
+                // 保存到内存和 localStorage
+                dictionaries[nameInput] = newDict;
+                
+                localStorage.setItem('wordVineDicts', JSON.stringify(dictionaries));
+                
+                updateDictSelect();
+                
+                // 选中新导入的词库
+                document.getElementById('dictSelect').value = nameInput;
+                
+                msgDiv.textContent = `成功导入 ${newDict.length} 个单词！`;
+                msgDiv.style.color = "#4CAF50";
+                
+                // 清空输入框
+                document.getElementById('dictNameInput').value = '';
+                document.getElementById('importData').value = '';
+                
+            } catch (e) {
+                msgDiv.textContent = "JSON 格式错误或数据无效: " + e.message;
+                msgDiv.style.color = "#f44336";
+            }
+        });
+
+        // 从文件加载
+        document.getElementById('loadFileBtn').addEventListener('click', () => {
+            document.getElementById('fileInput').click();
+        });
+
+        document.getElementById('fileInput').addEventListener('change', (event) => {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                try {
+                    const content = e.target.result;
+                    // 尝试解析以验证是否为有效 JSON
+                    JSON.parse(content);
+                    
+                    // 填充到文本框
+                    document.getElementById('importData').value = content;
+                    
+                    // 如果没有输入名称，使用文件名（去掉扩展名）
+                    const nameInput = document.getElementById('dictNameInput');
+                    if (!nameInput.value) {
+                        nameInput.value = file.name.replace(/\.[^/.]+$/, "");
+                    }
+                    
+                    document.getElementById('importMsg').textContent = "文件加载成功，请点击'保存并导入'";
+                    document.getElementById('importMsg').style.color = "#4CAF50";
+                } catch (err) {
+                    document.getElementById('importMsg').textContent = "文件内容不是有效的 JSON 格式";
+                    document.getElementById('importMsg').style.color = "#f44336";
+                }
+                // 清空 input 以便下次可以选择同一个文件
+                event.target.value = '';
+            };
+            reader.readAsText(file);
+        });
+
+        // 删除词库
+        document.getElementById('deleteDictBtn').addEventListener('click', () => {
+            const selectedName = document.getElementById('dictSelect').value;
+            if (!selectedName) {
+                alert("请先选择一个词库！");
+                return;
+            }
+            const input = prompt(`删除词库 "${selectedName}" 后无法恢复！\n请输入“确认”以继续：`);
+            if (input !== '确认') return;
+            delete dictionaries[selectedName];
+            localStorage.setItem('wordVineDicts', JSON.stringify(dictionaries));
+            clearLearningProgress(selectedName);
+            updateDictSelect();
+        });
+
+        // 重置词库学习记录
+        document.getElementById('resetDictBtn').addEventListener('click', () => {
+            const selectedName = document.getElementById('dictSelect').value;
+            const input = prompt(`将清除词库 "${selectedName}" 的所有学习记录！\n请输入“确认”以继续：`);
+            if (input !== '确认') return;
+            dailyStats.wordsCompleted = 0;
+            dailyStats.mistakes = 0;
+            dailyStats.deaths = 0;
+            saveDailyStats();
+            gameState.historicalMistakes = {};
+            gameState.wordMistakeMap = {};
+            clearLearningProgress(selectedName);
+            updateDictSelect();
+            alert(`词库 "${selectedName}" 的学习记录已重置！`);
+        });
+
+        // 开始游戏按钮
+        document.getElementById('startBtn').addEventListener('click', () => {
+            const selectedName = document.getElementById('dictSelect').value;
+            if (!selectedName || !dictionaries[selectedName]) {
+                alert("请先导入一个词库！");
+                return;
+            }
+            currentDictName = selectedName;
+            const fullDict = dictionaries[selectedName];
+            const progress = getLearningProgress(selectedName);
+            currentDictionary = fullDict.filter(item => !progress[item.word]);
+            
+            if (currentDictionary.length === 0) {
+                alert("该词库所有单词已学完！可以重置学习记录重新开始。");
+                return;
+            }
+            
+            currentDictionary.sort(() => Math.random() - 0.5);
+            
+            document.getElementById('menuLayer').classList.add('hidden');
+            document.getElementById('uiLayer').classList.remove('hidden');
+            
+            initGame();
+            if (!gameLoopRunning) {
+                gameLoopRunning = true;
+                requestAnimationFrame(gameLoop);
+            }
+        });
+
+        const gameState = {
+            currentWordIndex: 0,
+            currentStepIndex: 0,
+            score: 0,
+            combo: 1,
+            cameraY: 0,
+            targetCameraY: 0,
+            cameraX: 0,
+            targetCameraX: 0,
+            cameraZoom: 1,
+            targetCameraZoom: 1,
+            bgHue: 120, // 初始绿色色相
+            targetBgHue: 120,
+            isTransitioning: false, // 是否在单词切换的过渡期
+            isSettling: false, // 是否在簇结算状态
+            isPromptingMemo: false, // 是否在询问快速记忆
+            isShowingMemo: false, // 是否在展示快速记忆
+            nodes: [], // 存储藤蔓上的所有节点
+            activeOptions: [], // 当前屏幕上可供选择的节点（正确+干扰）
+            fadingNodes: [], // 正在淡出的错误节点
+            mistakeCount: 0,
+            lastMistakeTime: 0,
+            currentWordStartIndex: 0,
+            clusterSize: 10, // 每个簇的单词数量
+            wordsCompletedInCluster: 0,
+            clusterMistakes: 0, // 当前簇的总错误数
+            historicalMistakes: {}, // 记录曾选错的字母 {word: [wrongLetters]}
+            wordMistakeMap: {}, // 记录每个单词的错误次数，用于扎根挑战
+            wordLabels: [],
+            labelHitAreas: [],
+            parsedSteps: [],
+            isAutoDrawing: false,
+            isDragging: false,
+            dragStartY: 0,
+            dragStartCameraY: 0,
+            dragMoved: false,
+            isBrowsing: false
+        };
+
+        gameStateReady = true;
+
+        function adjustTreePositionOnResize(prevW, prevH, nextW, nextH) {
+            const dx = (nextW - prevW) * 0.5;
+            const dy = (nextH - prevH) * 0.5;
+            if (dx === 0 && dy === 0) return;
+
+            const shiftNodes = (arr) => {
+                arr.forEach(node => {
+                    node.x += dx;
+                    node.y += dy;
+                });
+            };
+
+            shiftNodes(gameState.nodes);
+            shiftNodes(gameState.activeOptions);
+            shiftNodes(gameState.fadingNodes);
+
+            gameState.wordLabels.forEach(label => {
+                label.x += dx;
+                label.y += dy;
+            });
+        }
+
+        const dailyStats = {
+            date: new Date().toDateString(),
+            wordsCompleted: 0,
+            mistakes: 0,
+            deaths: 0
+        };
+
+        function loadDailyStats() {
+            const saved = localStorage.getItem('wordVineDailyStats');
+            if (saved) {
+                try {
+                    const parsed = JSON.parse(saved);
+                    if (parsed.date === new Date().toDateString()) {
+                        dailyStats.wordsCompleted = parsed.wordsCompleted || 0;
+                        dailyStats.mistakes = parsed.mistakes || 0;
+                        dailyStats.deaths = parsed.deaths || 0;
+                    }
+                } catch(e) {}
+            }
+        }
+
+        function saveDailyStats() {
+            dailyStats.date = new Date().toDateString();
+            localStorage.setItem('wordVineDailyStats', JSON.stringify(dailyStats));
+        }
+
+        function showDailyStats() {
+            const overlay = document.getElementById('dailyStatsOverlay');
+            document.getElementById('statWords').innerText = dailyStats.wordsCompleted;
+            document.getElementById('statMistakes').innerText = dailyStats.mistakes;
+            document.getElementById('statDeaths').innerText = dailyStats.deaths;
+            overlay.classList.remove('hidden');
+            gameState.isTransitioning = true;
+        }
+
+        function hideDailyStats() {
+            document.getElementById('dailyStatsOverlay').classList.add('hidden');
+            gameState.isTransitioning = false;
+        }
+
+        function confirmExit() {
+            const ok = confirm('确定退出到主界面吗？当前进度已自动保存。');
+            if (!ok) return;
+            gameLoopRunning = false;
+            document.getElementById('uiLayer').classList.add('hidden');
+            document.getElementById('menuLayer').classList.remove('hidden');
+            updateDictSelect();
+        }
+
+        // 节点类
+        class Node {
+            constructor(x, y, letter, isCorrect, parent = null) {
+                this.x = x;
+                this.y = y;
+                this.letter = letter;
+                this.isCorrect = isCorrect;
+                this.parent = parent;
+                this.state = 'active';
+                this.radius = 20;
+                this.alpha = 1;
+                this.scale = 0;
+                this.targetScale = 1;
+                this.nodeType = 'letter';
+            }
+
+            update(dt) {
+                // 简单的弹性动画
+                this.scale += (this.targetScale - this.scale) * 0.1;
+                
+                if (this.state === 'fading') {
+                    this.alpha -= 0.05;
+                    if (this.alpha <= 0) {
+                        this.alpha = 0;
+                    }
+                }
+            }
+        }
+
+        const CAPSULE_PLACEHOLDERS = ['sth.', 'sb.', 'adj.', 'adv.', 'prep.', 'pron.', 'conj.'];
+
+        function formatWord(w) {
+            if (!w) return '';
+            return w.split(' ').map(part => {
+                if (CAPSULE_PLACEHOLDERS.includes(part.toLowerCase())) return part.toLowerCase();
+                if (part.length === 0) return part;
+                return part.charAt(0).toUpperCase() + part.slice(1).toLowerCase();
+            }).join(' ');
+        }
+
+        function parsePhrase(phrase) {
+            const steps = [];
+            let i = 0;
+            const sorted = [...CAPSULE_PLACEHOLDERS].sort((a, b) => b.length - a.length);
+            while (i < phrase.length) {
+                let found = false;
+                for (const ph of sorted) {
+                    const sub = phrase.substring(i, i + ph.length);
+                    if (sub.toLowerCase() === ph.toLowerCase()) {
+                        const before = i === 0 || !/[a-zA-Z]/.test(phrase[i - 1]);
+                        const after = i + ph.length >= phrase.length || !/[a-zA-Z]/.test(phrase[i + ph.length]);
+                        if (before && after) {
+                            steps.push({ type: 'auto', display: sub, subType: 'capsule' });
+                            i += ph.length;
+                            found = true;
+                            break;
+                        }
+                    }
+                }
+                if (found) continue;
+                if (phrase[i] === '(') {
+                    const close = phrase.indexOf(')', i);
+                    if (close !== -1) {
+                        steps.push({ type: 'auto', display: phrase.substring(i, close + 1), subType: 'bracket' });
+                        i = close + 1;
+                        continue;
+                    }
+                }
+                if (/[a-zA-Z]/.test(phrase[i])) {
+                    steps.push({ type: 'input', char: phrase[i].toUpperCase(), displayChar: phrase[i].toLowerCase() });
+                    i++;
+                } else if (phrase[i] === ' ') {
+                    steps.push({ type: 'auto', display: ' ', subType: 'space' });
+                    i++;
+                } else {
+                    steps.push({ type: 'auto', display: phrase[i], subType: 'symbol' });
+                    i++;
+                }
+            }
+            return steps;
+        }
+
+        function advanceAfterStep(parentNode) {
+            const nextIdx = gameState.currentStepIndex + 1;
+            if (nextIdx >= gameState.parsedSteps.length) {
+                completeWord();
+                return;
+            }
+            if (gameState.parsedSteps[nextIdx].type === 'auto') {
+                processAutoSteps(parentNode);
+            } else {
+                generateOptions(parentNode);
+            }
+        }
+
+        function processAutoSteps(parentNode) {
+            gameState.isAutoDrawing = true;
+            gameState.activeOptions = [];
+            const autoSteps = [];
+            let idx = gameState.currentStepIndex + 1;
+            while (idx < gameState.parsedSteps.length && gameState.parsedSteps[idx].type === 'auto') {
+                autoSteps.push({ step: gameState.parsedSteps[idx], idx });
+                idx++;
+            }
+            let current = parentNode;
+            let delay = 0;
+            autoSteps.forEach((item, i) => {
+                delay += item.step.subType === 'space' ? 80 : 150;
+                setTimeout(() => {
+                    const dist = item.step.subType === 'space' ? 40 : 55;
+                    let x = current.x + (Math.random() - 0.5) * 15;
+                    const y = current.y - dist;
+                    const margin = 40;
+                    x = Math.max(margin, Math.min(width - margin, x));
+                    const node = new Node(x, y, item.step.display, true, current);
+                    node.state = 'completed';
+                    node.nodeType = item.step.subType;
+                    node.scale = 0;
+                    node.targetScale = 1;
+                    gameState.nodes.push(node);
+                    gameState.currentStepIndex = item.idx;
+                    current = node;
+                    gameState.targetCameraY = height * 0.5 - node.y;
+                    gameState.targetCameraX = width * 0.5 - node.x;
+                    playAutoClick();
+                    if (i === autoSteps.length - 1) {
+                        gameState.isAutoDrawing = false;
+                        const next = gameState.parsedSteps[gameState.currentStepIndex + 1];
+                        if (next && next.type === 'input') {
+                            generateOptions(node);
+                        } else if (!next) {
+                            completeWord();
+                        }
+                        updateUI();
+                    }
+                }, delay);
+            });
+        }
+
+        // 初始化游戏
+        function initGame() {
+            gameState.currentWordIndex = 0;
+            gameState.currentStepIndex = 0;
+            gameState.score = 0;
+            gameState.combo = 1;
+            gameState.nodes = [];
+            gameState.activeOptions = [];
+            gameState.fadingNodes = [];
+            gameState.mistakeCount = 0;
+            gameState.lastMistakeTime = 0;
+            gameState.currentWordStartIndex = 0;
+            gameState.wordsCompletedInCluster = 0;
+            gameState.clusterMistakes = 0;
+            gameState.historicalMistakes = {};
+            gameState.wordMistakeMap = {};
+            gameState.wordLabels = [];
+            gameState.cameraZoom = 1;
+            gameState.targetCameraZoom = 1;
+            gameState.bgHue = 120;
+            gameState.targetBgHue = 120;
+            gameState.isSettling = false;
+            gameState.isAutoDrawing = false;
+            gameState.isPromptingMemo = false;
+            gameState.isShowingMemo = false;
+            
+            promptQuickMemo();
+        }
+
+        function startGameplay() {
+            const firstPhrase = currentDictionary[gameState.currentWordIndex].word;
+            gameState.parsedSteps = parsePhrase(firstPhrase);
+            gameState.currentStepIndex = 0;
+
+            const firstStep = gameState.parsedSteps[0];
+            const rootNode = new Node(width / 2, height * 0.8, firstStep.char, true);
+            rootNode.state = 'completed';
+            rootNode.scale = 1;
+            gameState.nodes.push(rootNode);
+            
+            gameState.cameraY = 0;
+            gameState.targetCameraY = 0;
+            gameState.cameraX = 0;
+            gameState.targetCameraX = 0;
+
+            advanceAfterStep(rootNode);
+            updateUI();
+            initProgressGauge();
+        }
+
+        function initProgressGauge() {
+            const gauge = document.getElementById('progressGauge');
+            gauge.innerHTML = '';
+            for (let i = 0; i < gameState.clusterSize; i++) {
+                const dot = document.createElement('div');
+                dot.className = 'gauge-dot';
+                if (i === 0) dot.classList.add('current');
+                gauge.appendChild(dot);
+            }
+        }
+
+        function updateProgressGauge() {
+            const dots = document.querySelectorAll('.gauge-dot');
+            dots.forEach((dot, index) => {
+                dot.className = 'gauge-dot'; // reset
+                if (index < gameState.wordsCompletedInCluster) {
+                    dot.classList.add('completed');
+                } else if (index === gameState.wordsCompletedInCluster) {
+                    dot.classList.add('current');
+                }
+            });
+            
+            // 更新文字进度
+            const totalWords = dictionaries[currentDictName] ? dictionaries[currentDictName].length : currentDictionary.length;
+            const learnedWords = getLearnedCount(currentDictName);
+            document.getElementById('progressDisplay').innerText = `${learnedWords}/${totalWords}`;
+        }
+
+        // --- 游戏主循环 ---
+        let lastTime = 0;
+        let gameLoopRunning = false;
+        function gameLoop(timestamp) {
+            const deltaTime = timestamp - lastTime;
+            lastTime = timestamp;
+
+            update(deltaTime);
+            draw();
+
+            if (gameLoopRunning) {
+                requestAnimationFrame(gameLoop);
+            }
+        }
+
+        function update(dt) {
+            if (!gameState.isDragging && !gameState.isBrowsing) {
+                gameState.cameraY += (gameState.targetCameraY - gameState.cameraY) * 0.1;
+            }
+            gameState.cameraX += (gameState.targetCameraX - gameState.cameraX) * 0.1;
+            gameState.cameraZoom += (gameState.targetCameraZoom - gameState.cameraZoom) * 0.05;
+            gameState.bgHue += (gameState.targetBgHue - gameState.bgHue) * 0.02;
+
+            // 更新所有节点状态
+            gameState.nodes.forEach(node => node.update(dt));
+            gameState.activeOptions.forEach(node => node.update(dt));
+            gameState.fadingNodes.forEach(node => node.update(dt));
+            
+            // 清理完全透明的节点
+            gameState.fadingNodes = gameState.fadingNodes.filter(node => node.alpha > 0);
+        }
+
+        function draw() {
+            // 清空画布，使用动态色相
+            ctx.fillStyle = `hsl(${gameState.bgHue}, 20%, 8%)`;
+            ctx.fillRect(0, 0, width, height);
+            
+            // 绘制动态背景网格
+            drawGrid();
+
+            // 应用相机变换
+            ctx.save();
+            
+            // 缩放中心点为屏幕中心
+            ctx.translate(width / 2, height / 2);
+            ctx.scale(gameState.cameraZoom, gameState.cameraZoom);
+            ctx.translate(-width / 2, -height / 2);
+            
+            ctx.translate(gameState.cameraX, gameState.cameraY);
+
+            // 绘制藤蔓和节点
+            drawVines();
+            drawNodes();
+
+            ctx.restore();
+
+            if (gameState.isBrowsing) {
+                const btnW = 120, btnH = 40;
+                const btnX = (width - btnW) / 2;
+                const btnY = height - 60;
+                ctx.fillStyle = 'rgba(76, 175, 80, 0.85)';
+                ctx.beginPath();
+                ctx.roundRect(btnX, btnY, btnW, btnH, 8);
+                ctx.fill();
+                ctx.fillStyle = '#fff';
+                ctx.font = 'bold 15px sans-serif';
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                ctx.fillText('回到当前', btnX + btnW / 2, btnY + btnH / 2);
+                gameState._backBtnRect = { x: btnX, y: btnY, w: btnW, h: btnH };
+            }
+        }
+
+        function drawGrid() {
+            const gridSize = 50;
+            const offsetX = 0;
+            // 利用取模运算实现无限滚动错觉
+            const offsetY = gameState.cameraY % gridSize;
+
+            ctx.strokeStyle = 'rgba(255, 255, 255, 0.05)';
+            ctx.lineWidth = 1;
+            ctx.beginPath();
+
+            // 垂直线
+            for (let x = offsetX; x < width; x += gridSize) {
+                ctx.moveTo(x, 0);
+                ctx.lineTo(x, height);
+            }
+
+            // 水平线
+            for (let y = offsetY; y < height; y += gridSize) {
+                ctx.moveTo(0, y);
+                ctx.lineTo(width, y);
+            }
+
+            ctx.stroke();
+        }
+
+        function drawVines() {
+            // 绘制已完成的路径（粗实线，发光）
+            ctx.beginPath();
+            ctx.strokeStyle = '#4CAF50'; // 绿色藤蔓
+            ctx.lineWidth = 6;
+            ctx.lineCap = 'round';
+            ctx.lineJoin = 'round';
+            ctx.shadowBlur = 15;
+            ctx.shadowColor = '#4CAF50';
+
+            if (gameState.nodes.length > 0) {
+                ctx.moveTo(gameState.nodes[0].x, gameState.nodes[0].y);
+                for (let i = 1; i < gameState.nodes.length; i++) {
+                    const node = gameState.nodes[i];
+                    
+                    if (node.isNewTreeRoot) {
+                        ctx.moveTo(node.x, node.y);
+                    } else {
+                        const prevNode = gameState.nodes[i - 1];
+                        if (node.nodeType === 'space') {
+                            ctx.stroke();
+                            ctx.beginPath();
+                            ctx.setLineDash([4, 6]);
+                            ctx.lineWidth = 2;
+                            ctx.moveTo(prevNode.x, prevNode.y);
+                            ctx.lineTo(node.x, node.y);
+                            ctx.stroke();
+                            ctx.beginPath();
+                            ctx.setLineDash([]);
+                            ctx.lineWidth = 6;
+                            ctx.moveTo(node.x, node.y);
+                        } else {
+                            const cpX = (prevNode.x + node.x) / 2;
+                            const cpY = prevNode.y - 30;
+                            ctx.quadraticCurveTo(cpX, cpY, node.x, node.y);
+                        }
+                    }
+                }
+            }
+            ctx.stroke();
+            
+            // 重置阴影
+            ctx.shadowBlur = 0;
+
+            // 绘制当前分支（细虚线，半透明）
+            if (gameState.nodes.length > 0 && !gameState.isTransitioning) {
+                const lastNode = gameState.nodes[gameState.nodes.length - 1];
+                
+                gameState.activeOptions.forEach(option => {
+                    ctx.beginPath();
+                    if (option.state === 'wrong') {
+                        ctx.strokeStyle = `rgba(244, 67, 54, ${option.alpha})`; // 红色错误路径
+                        ctx.setLineDash([]);
+                    } else {
+                        ctx.strokeStyle = `rgba(255, 255, 255, ${option.alpha * 0.3})`; // 白色虚线
+                        ctx.setLineDash([5, 5]);
+                    }
+                    ctx.lineWidth = 2;
+                    
+                    const cpX = (lastNode.x + option.x) / 2;
+                    const cpY = lastNode.y - 30;
+                    ctx.moveTo(lastNode.x, lastNode.y);
+                    ctx.quadraticCurveTo(cpX, cpY, option.x, option.y);
+                    ctx.stroke();
+                });
+                ctx.setLineDash([]); // 恢复实线
+            }
+        }
+
+        function drawNodes() {
+            gameState.labelHitAreas = [];
+
+            gameState.nodes.forEach((node, index) => {
+                const isLastNodeOfWord = index > 0 && (index === gameState.nodes.length - 1 || gameState.nodes[index + 1].isNewTreeRoot);
+                if (isLastNodeOfWord && node.state === 'completed' && node.nodeType === 'letter') {
+                    drawBloom(node);
+                } else {
+                    drawSingleNode(node, '#4CAF50', '#fff');
+                }
+            });
+            
+            // 绘制单词标签
+            gameState.wordLabels.forEach(label => {
+                const wordText = formatWord(label.word);
+                const iconText = '🔊';
+                const textX = label.x + 30;
+                const wordY = label.y - 8;
+                const meaningY = label.y + 10;
+
+                ctx.save();
+                ctx.font = 'bold 14px Courier New';
+                ctx.textAlign = 'left';
+                ctx.textBaseline = 'middle';
+                ctx.fillStyle = 'rgba(76, 175, 80, 0.7)';
+                ctx.fillText(wordText, textX, wordY);
+                const wordWidth = ctx.measureText(wordText).width;
+
+                ctx.font = '13px sans-serif';
+                ctx.fillStyle = 'rgba(76, 175, 80, 0.65)';
+                ctx.fillText(iconText, textX + wordWidth + 8, wordY + 1);
+                const iconWidth = ctx.measureText(iconText).width;
+
+                ctx.font = '12px sans-serif';
+                ctx.fillStyle = 'rgba(255, 255, 255, 0.5)';
+                ctx.fillText(label.meaning, textX, meaningY);
+                const meaningWidth = ctx.measureText(label.meaning).width;
+                ctx.restore();
+
+                gameState.labelHitAreas.push({
+                    x: textX - 4,
+                    y: wordY - 12,
+                    w: Math.max(wordWidth + 8 + iconWidth, meaningWidth) + 8,
+                    h: 32,
+                    word: label.word
+                });
+            });
+            
+            // 绘制正在淡出的错误节点
+            gameState.fadingNodes.forEach(node => {
+                drawSingleNode(node, `rgba(244, 67, 54, ${node.alpha})`, '#fff', node.alpha);
+            });
+            
+            // 绘制选项节点
+            if (!gameState.isTransitioning && !gameState.isSettling) {
+                gameState.activeOptions.forEach(node => {
+                    let bgColor = 'rgba(255, 255, 255, 0.1)';
+                    let textColor = `rgba(255, 255, 255, ${node.alpha})`;
+                    
+                    if (node.state === 'wrong') {
+                        bgColor = `rgba(244, 67, 54, ${node.alpha})`;
+                        textColor = '#fff';
+                    }
+                    
+                    drawSingleNode(node, bgColor, textColor, node.alpha);
+                });
+            }
+        }
+
+        function drawBloom(node) {
+            ctx.save();
+            ctx.translate(node.x, node.y);
+            ctx.scale(node.scale, node.scale);
+
+            // 绘制几何花苞 (简单的多边形)
+            ctx.beginPath();
+            ctx.moveTo(0, -25);
+            ctx.lineTo(15, -10);
+            ctx.lineTo(10, 15);
+            ctx.lineTo(-10, 15);
+            ctx.lineTo(-15, -10);
+            ctx.closePath();
+            
+            ctx.fillStyle = '#8BC34A'; // 浅绿色花苞
+            ctx.fill();
+            ctx.lineWidth = 2;
+            ctx.strokeStyle = '#fff';
+            ctx.stroke();
+            
+            // 绘制字母
+            ctx.fillStyle = '#fff';
+            ctx.font = 'bold 16px Courier New';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText(node.letter, 0, 2);
+
+            ctx.restore();
+        }
+
+        function drawSingleNode(node, bgColor, textColor, alpha = 1) {
+            if (node.nodeType === 'capsule') { drawCapsuleNode(node, alpha); return; }
+            if (node.nodeType === 'bracket') { drawBracketNode(node, alpha); return; }
+            if (node.nodeType === 'symbol') { drawSymbolNode(node, alpha); return; }
+            if (node.nodeType === 'space') return;
+
+            ctx.save();
+            ctx.globalAlpha = alpha;
+            ctx.translate(node.x, node.y);
+            ctx.scale(node.scale, node.scale);
+
+            ctx.beginPath();
+            ctx.arc(0, 0, node.radius, 0, Math.PI * 2);
+            ctx.fillStyle = bgColor;
+            ctx.fill();
+            
+            if (node.state === 'completed') {
+                ctx.lineWidth = 2;
+                ctx.strokeStyle = '#fff';
+                ctx.stroke();
+            }
+
+            ctx.fillStyle = textColor;
+            ctx.font = 'bold 20px Courier New';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText(node.letter, 0, 2);
+
+            ctx.restore();
+        }
+
+        function drawCapsuleNode(node, alpha) {
+            ctx.save();
+            ctx.globalAlpha = alpha;
+            ctx.translate(node.x, node.y);
+            ctx.scale(node.scale, node.scale);
+            const text = node.letter;
+            ctx.font = 'bold 11px Courier New';
+            const tw = ctx.measureText(text).width;
+            const pad = 10;
+            const w = tw + pad * 2;
+            const h = 22;
+            ctx.beginPath();
+            ctx.roundRect(-w / 2, -h / 2, w, h, h / 2);
+            ctx.fillStyle = 'rgba(139,195,74,0.25)';
+            ctx.fill();
+            ctx.strokeStyle = 'rgba(139,195,74,0.6)';
+            ctx.lineWidth = 1.5;
+            ctx.stroke();
+            ctx.shadowBlur = 8;
+            ctx.shadowColor = '#8BC34A';
+            ctx.stroke();
+            ctx.shadowBlur = 0;
+            ctx.fillStyle = '#8BC34A';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText(text, 0, 0);
+            ctx.restore();
+        }
+
+        function drawSymbolNode(node, alpha) {
+            ctx.save();
+            ctx.globalAlpha = alpha;
+            ctx.translate(node.x, node.y);
+            ctx.scale(node.scale, node.scale);
+            ctx.beginPath();
+            ctx.arc(0, 0, 10, 0, Math.PI * 2);
+            ctx.fillStyle = 'rgba(255,255,255,0.12)';
+            ctx.fill();
+            ctx.fillStyle = 'rgba(255,255,255,0.5)';
+            ctx.font = 'bold 12px Courier New';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText(node.letter, 0, 0);
+            ctx.restore();
+        }
+
+        function drawBracketNode(node, alpha) {
+            ctx.save();
+            ctx.globalAlpha = alpha * 0.6;
+            ctx.translate(node.x, node.y);
+            ctx.scale(node.scale, node.scale);
+            const text = node.letter;
+            ctx.font = '11px Courier New';
+            const tw = ctx.measureText(text).width;
+            const pad = 8;
+            const w = tw + pad * 2;
+            const h = 20;
+            ctx.beginPath();
+            ctx.roundRect(-w / 2, -h / 2, w, h, 4);
+            ctx.fillStyle = 'rgba(255,255,255,0.08)';
+            ctx.fill();
+            ctx.fillStyle = 'rgba(255,255,255,0.45)';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText(text, 0, 0);
+            ctx.restore();
+        }
+
+        // --- 5. 双模输入与核心机制 ---
+        function screenToWorld(screenX, screenY) {
+            const centerX = width / 2;
+            const centerY = height / 2;
+            const z = gameState.cameraZoom || 1;
+            return {
+                x: ((screenX - centerX) / z) + centerX - gameState.cameraX,
+                y: ((screenY - centerY) / z) + centerY - gameState.cameraY
+            };
+        }
+
+        window.addEventListener('keydown', (e) => {
+            // 处理快速记忆询问界面的键盘事件
+            if (gameState.isPromptingMemo) {
+                if (e.key.toUpperCase() === 'Y') {
+                    showQuickMemo();
+                } else if (e.key.toUpperCase() === 'N' || e.key === 'Escape') {
+                    dismissQuickMemo();
+                }
+                return;
+            }
+            
+            // 处理快速记忆展示界面的键盘事件
+            if (gameState.isShowingMemo) {
+                if (e.key === ' ' || e.key === 'Escape' || e.key === 'Enter') {
+                    e.preventDefault();
+                    dismissQuickMemo();
+                }
+                return;
+            }
+            
+            if (gameState.isTransitioning || gameState.isSettling || gameState.isAutoDrawing) return;
+            
+            const pressedKey = e.key.toUpperCase();
+            
+            // 处理空格键跳过
+            if (e.key === ' ') {
+                e.preventDefault();
+                skipWord();
+                return;
+            }
+            
+            // 处理退格键修剪
+            if (e.key === 'Backspace') {
+                e.preventDefault();
+                pruneNode();
+                return;
+            }
+
+            // 仅处理字母键
+            if (!/^[A-Z]$/.test(pressedKey)) return;
+
+            handleInput(pressedKey);
+        });
+
+        canvas.addEventListener('pointerdown', (e) => {
+            gameState.isDragging = true;
+            gameState.dragStartY = e.clientY;
+            gameState.dragStartCameraY = gameState.cameraY;
+            gameState.dragMoved = false;
+        });
+
+        canvas.addEventListener('pointermove', (e) => {
+            if (!gameState.isDragging) return;
+            const dy = e.clientY - gameState.dragStartY;
+            if (Math.abs(dy) > 5) {
+                gameState.dragMoved = true;
+                gameState.cameraY = gameState.dragStartCameraY + dy;
+            }
+        });
+
+        canvas.addEventListener('pointerup', (e) => {
+            if (gameState.isDragging && !gameState.dragMoved) {
+                if (gameState.isBrowsing && gameState._backBtnRect) {
+                    const rect2 = canvas.getBoundingClientRect();
+                    const mx = e.clientX - rect2.left;
+                    const my = e.clientY - rect2.top;
+                    const b = gameState._backBtnRect;
+                    if (mx >= b.x && mx <= b.x + b.w && my >= b.y && my <= b.y + b.h) {
+                        const lastNode = gameState.nodes[gameState.nodes.length - 1];
+                        if (lastNode) {
+                            gameState.targetCameraY = height * 0.5 - lastNode.y;
+                        }
+                        gameState.isBrowsing = false;
+                        gameState.isDragging = false;
+                        gameState.dragMoved = false;
+                        return;
+                    }
+                }
+                const rect = canvas.getBoundingClientRect();
+                const mouseX = e.clientX - rect.left;
+                const mouseY = e.clientY - rect.top;
+                const worldPoint = screenToWorld(mouseX, mouseY);
+
+                for (let i = gameState.labelHitAreas.length - 1; i >= 0; i--) {
+                    const area = gameState.labelHitAreas[i];
+                    if (worldPoint.x >= area.x && worldPoint.x <= area.x + area.w && worldPoint.y >= area.y && worldPoint.y <= area.y + area.h) {
+                        speakWordPhrase(area.word);
+                        gameState.isDragging = false;
+                        gameState.dragMoved = false;
+                        return;
+                    }
+                }
+
+                if (!gameState.isTransitioning && !gameState.isAutoDrawing) {
+                    const clickX = worldPoint.x;
+                    const clickY = worldPoint.y;
+
+                    for (let i = 0; i < gameState.activeOptions.length; i++) {
+                        const option = gameState.activeOptions[i];
+                        const dx = clickX - option.x;
+                        const dy2 = clickY - option.y;
+                        const distance = Math.sqrt(dx * dx + dy2 * dy2);
+                        if (distance <= option.radius * 1.5) {
+                            handleInput(option.letter);
+                            break;
+                        }
+                    }
+                }
+            } else if (gameState.dragMoved) {
+                gameState.isBrowsing = true;
+            }
+            gameState.isDragging = false;
+            gameState.dragMoved = false;
+        });
+
+        canvas.addEventListener('pointerleave', () => {
+            if (gameState.isDragging && gameState.dragMoved) {
+                gameState.isBrowsing = true;
+            }
+            gameState.isDragging = false;
+            gameState.dragMoved = false;
+        });
+
+        function handleInput(letter) {
+            const nextIdx = gameState.currentStepIndex + 1;
+            if (nextIdx >= gameState.parsedSteps.length) return;
+            const nextStep = gameState.parsedSteps[nextIdx];
+            if (nextStep.type !== 'input') return;
+            const correctLetter = nextStep.char;
+
+            const selectedOption = gameState.activeOptions.find(opt => opt.letter === letter);
+
+            if (selectedOption) {
+                if (gameState.isBrowsing) {
+                    gameState.isBrowsing = false;
+                    const currentNode = gameState.nodes[gameState.nodes.length - 1];
+                    if (currentNode) {
+                        gameState.targetCameraY = height * 0.5 - currentNode.y;
+                        gameState.targetCameraX = width * 0.5 - currentNode.x;
+                    }
+                }
+                if (selectedOption.isCorrect) {
+                    advanceNode(selectedOption);
+                } else {
+                    handleMistake(selectedOption);
+                }
+            }
+        }
+
+        function advanceNode(selectedOption) {
+            playCorrectNote();
+            const margin = 40;
+            selectedOption.x = Math.max(margin, Math.min(width - margin, selectedOption.x));
+            
+            selectedOption.state = 'completed';
+            selectedOption.scale = 1.2;
+            setTimeout(() => selectedOption.targetScale = 1, 100);
+            gameState.nodes.push(selectedOption);
+
+            gameState.currentStepIndex++;
+            gameState.score += 10 * gameState.combo;
+            gameState.combo++;
+            gameState.mistakeCount = 0;
+            updateUI();
+
+            gameState.targetCameraY = height * 0.5 - selectedOption.y;
+            gameState.targetCameraX = width * 0.5 - selectedOption.x;
+
+            advanceAfterStep(selectedOption);
+        }
+
+        function handleMistake(wrongOption) {
+            playWrongNote();
+            const now = Date.now();
+            
+            // 记录单词错误次数
+            const currentWordObj = currentDictionary[gameState.currentWordIndex];
+            const wordKey = currentWordObj.word;
+            gameState.wordMistakeMap[wordKey] = (gameState.wordMistakeMap[wordKey] || 0) + 1;
+            
+            dailyStats.mistakes++;
+            saveDailyStats();
+            
+            // 记录历史错误字母
+            if (!gameState.historicalMistakes[wordKey]) {
+                gameState.historicalMistakes[wordKey] = [];
+            }
+            if (!gameState.historicalMistakes[wordKey].includes(wrongOption.letter)) {
+                gameState.historicalMistakes[wordKey].push(wrongOption.letter);
+            }
+            
+            // 视觉反馈：节点变红并淡出
+            wrongOption.state = 'wrong';
+            wrongOption.targetScale = 0.8;
+            
+            // 将错误节点移入 fadingNodes 数组，以便重新生成选项时它还能继续显示淡出动画
+            gameState.fadingNodes.push(wrongOption);
+            setTimeout(() => wrongOption.state = 'fading', 300);
+
+            // 逻辑反馈：重置 Combo
+            gameState.combo = 1;
+            updateUI();
+
+            // 屏幕震动效果 (简单实现：给 body 加个 class)
+            document.body.style.transform = 'translate(5px, 5px)';
+            setTimeout(() => document.body.style.transform = 'translate(-5px, -5px)', 50);
+            setTimeout(() => document.body.style.transform = 'translate(5px, -5px)', 100);
+            setTimeout(() => document.body.style.transform = 'translate(0, 0)', 150);
+            
+            // 错误计数逻辑
+            if (now - gameState.lastMistakeTime < 3000) {
+                // 3秒内连续错误
+                gameState.mistakeCount++;
+            } else {
+                gameState.mistakeCount = 1;
+            }
+            gameState.lastMistakeTime = now;
+            
+            if (gameState.mistakeCount >= 3) {
+                // 连续错误3次，触发强制记忆
+                triggerMemorization();
+            } else {
+                // 重新生成选项，防止猜测
+                const parentNode = gameState.nodes[gameState.nodes.length - 1];
+                generateOptions(parentNode);
+            }
+        }
+
+        function triggerMemorization() {
+            dailyStats.deaths++;
+            saveDailyStats();
+            
+            gameState.isTransitioning = true;
+            const currentWordObj = currentDictionary[gameState.currentWordIndex];
+            
+            const overlay = document.getElementById('memorizeOverlay');
+            document.getElementById('memoWord').innerText = formatWord(currentWordObj.word);
+            document.getElementById('memoMeaning').innerText = currentWordObj.meaning;
+            const countdownEl = document.getElementById('memoCountdown');
+            
+            overlay.classList.remove('hidden');
+            
+            let timeLeft = 10;
+            countdownEl.innerText = timeLeft;
+            
+            const timer = setInterval(() => {
+                timeLeft--;
+                countdownEl.innerText = timeLeft;
+                
+                if (timeLeft <= 0) {
+                    clearInterval(timer);
+                    overlay.classList.add('hidden');
+                    
+                    // 扎根挑战：如果错误次数过多，强制倒序拼写
+                    const wordKey = currentWordObj.word;
+                    if (gameState.wordMistakeMap[wordKey] > 2) {
+                        startGroundingMode();
+                    } else {
+                        // 重置当前单词的进度
+                        resetCurrentWord();
+                    }
+                }
+            }, 1000);
+        }
+
+        function startGroundingMode() {
+            // 简单的扎根挑战：重置单词，但提示用户需要更加小心
+            // 可以在这里加入更复杂的逻辑，比如倒序拼写，这里为了保持代码简洁，我们只做提示并重置
+            alert("扎根挑战：请仔细拼写！");
+            resetCurrentWord();
+        }
+
+        function resetCurrentWord() {
+            gameState.mistakeCount = 0;
+            gameState.currentStepIndex = 0;
+            
+            gameState.nodes = gameState.nodes.slice(0, gameState.currentWordStartIndex + 1);
+            
+            const rootNode = gameState.nodes[gameState.nodes.length - 1];
+            
+            gameState.targetCameraY = height * 0.5 - rootNode.y;
+            gameState.targetCameraX = width * 0.5 - rootNode.x;
+            
+            gameState.isTransitioning = false;
+            updateUI();
+            advanceAfterStep(rootNode);
+        }
+
+        function updateUI() {
+            document.getElementById('scoreDisplay').innerText = gameState.score;
+            document.getElementById('comboDisplay').innerText = `x${gameState.combo}`;
+            document.getElementById('currentMeaningDisplay').innerText = currentDictionary[gameState.currentWordIndex].meaning;
+            
+            const totalWords = dictionaries[currentDictName] ? dictionaries[currentDictName].length : currentDictionary.length;
+            const learnedWords = getLearnedCount(currentDictName);
+            document.getElementById('progressDisplay').innerText = `${learnedWords}/${totalWords}`;
+            
+            const steps = gameState.parsedSteps;
+            let html = '';
+            let isFirstLetter = true;
+            for (let i = 0; i < steps.length; i++) {
+                const s = steps[i];
+                let d = s.type === 'input' ? s.displayChar : s.display;
+                if (s.type === 'input' && isFirstLetter) {
+                    d = d.toUpperCase();
+                    isFirstLetter = false;
+                }
+                if (s.type === 'auto' && s.subType === 'space') {
+                    isFirstLetter = true;
+                }
+                const escaped = d.replace(/</g, '&lt;').replace(/>/g, '&gt;');
+                if (i <= gameState.currentStepIndex) {
+                    html += `<span style="color:#4CAF50;">${escaped}</span>`;
+                }
+            }
+            document.getElementById('selectedLettersDisplay').innerHTML = html;
+        }
+
+        // --- 快速记忆系统 ---
+        function promptQuickMemo() {
+            gameState.isPromptingMemo = true;
+            document.getElementById('quickMemoPromptOverlay').classList.remove('hidden');
+        }
+
+        function showQuickMemo() {
+            gameState.isPromptingMemo = false;
+            gameState.isShowingMemo = true;
+            document.getElementById('quickMemoPromptOverlay').classList.add('hidden');
+            
+            const listEl = document.getElementById('quickMemoList');
+            listEl.innerHTML = '';
+            
+            // 如果是游戏刚开始（nodes为空），从当前index开始，否则从下一个单词开始
+            const startIdx = gameState.nodes.length === 0 ? gameState.currentWordIndex : gameState.currentWordIndex + 1;
+            const endIdx = Math.min(startIdx + gameState.clusterSize, currentDictionary.length);
+            
+            for (let i = startIdx; i < endIdx; i++) {
+                const item = currentDictionary[i];
+                const row = document.createElement('div');
+                row.style.cssText = 'padding: 6px 0; border-bottom: 1px solid #333; display: flex; justify-content: space-between; align-items: center; gap: 12px; cursor: pointer;';
+                row.innerHTML = `<span style="color: #4CAF50; font-weight: bold; letter-spacing: 1px; white-space: nowrap; flex-shrink: 0;">${formatWord(item.word)}</span><span style="color: #ccc; text-align: right;">${item.meaning}</span>`;
+                row.addEventListener('click', () => {
+                    speakWordPhrase(item.word);
+                });
+                listEl.appendChild(row);
+            }
+            
+            document.getElementById('quickMemoDisplayOverlay').classList.remove('hidden');
+        }
+
+        function dismissQuickMemo() {
+            gameState.isPromptingMemo = false;
+            gameState.isShowingMemo = false;
+            document.getElementById('quickMemoPromptOverlay').classList.add('hidden');
+            document.getElementById('quickMemoDisplayOverlay').classList.add('hidden');
+            
+            if (gameState.nodes.length === 0) {
+                startGameplay();
+            } else {
+                startNextWord();
+            }
+        }
+
+        document.getElementById('btnQuickMemoYes').addEventListener('click', () => showQuickMemo());
+        document.getElementById('btnQuickMemoNo').addEventListener('click', () => dismissQuickMemo());
+        document.getElementById('btnQuickMemoDone').addEventListener('click', () => dismissQuickMemo());
+
+        // --- 6. 智能干扰项与无缝衔接 ---
+        function generateOptions(parentNode) {
+            const nextIdx = gameState.currentStepIndex + 1;
+            if (nextIdx >= gameState.parsedSteps.length) return;
+            const nextStep = gameState.parsedSteps[nextIdx];
+            if (nextStep.type !== 'input') return;
+            const correctLetter = nextStep.char;
+            
+            const distractors = getDistractors(correctLetter);
+            
+            const options = [correctLetter, ...distractors];
+            options.sort(() => Math.random() - 0.5);
+
+            gameState.activeOptions = [];
+            
+            // 扇形分布参数
+            const numOptions = options.length;
+            const spreadAngle = Math.PI / 3 + (numOptions - 3) * (Math.PI / 8);
+            const startAngle = -Math.PI / 2 - spreadAngle / 2;
+            const angleStep = numOptions > 1 ? spreadAngle / (numOptions - 1) : 0;
+            const distance = numOptions > 3 ? 80 + (numOptions - 3) * 20 : 80;
+
+            options.forEach((letter, index) => {
+                const angle = startAngle + index * angleStep;
+                let x = parentNode.x + Math.cos(angle) * distance;
+                const y = parentNode.y + Math.sin(angle) * distance;
+                
+                // 限制 x 坐标在屏幕范围内，留 40px 边距
+                const margin = 40;
+                x = Math.max(margin, Math.min(width - margin, x));
+                
+                const isCorrect = letter === correctLetter;
+                const node = new Node(x, y, letter, isCorrect, parentNode);
+                gameState.activeOptions.push(node);
+            });
+        }
+
+        function getDistractors(correctLetter) {
+            // 简单的近音/近形/相邻键算法
+            const map = {
+                'A': ['S', 'Q', 'Z'], 'B': ['V', 'N', 'P'], 'C': ['X', 'V', 'S'],
+                'D': ['S', 'F', 'E'], 'E': ['W', 'R', 'D'], 'F': ['D', 'G', 'R'],
+                'G': ['F', 'H', 'T'], 'H': ['G', 'J', 'Y'], 'I': ['U', 'O', 'K'],
+                'J': ['H', 'K', 'U'], 'K': ['J', 'L', 'I'], 'L': ['K', 'O', 'P'],
+                'M': ['N', 'J', 'K'], 'N': ['B', 'M', 'H'], 'O': ['I', 'P', 'L'],
+                'P': ['O', 'Q', 'B'], 'Q': ['W', 'A', 'P'], 'R': ['E', 'T', 'F'],
+                'S': ['A', 'D', 'W'], 'T': ['R', 'Y', 'G'], 'U': ['Y', 'I', 'J'],
+                'V': ['C', 'B', 'F'], 'W': ['Q', 'E', 'S'], 'X': ['Z', 'C', 'S'],
+                'Y': ['T', 'U', 'H'], 'Z': ['A', 'X', 'S']
+            };
+            
+            let choices = map[correctLetter] || ['A', 'E', 'I', 'O', 'U'];
+
+            let maxOptions = 3;
+            if (gameState.combo >= 100) maxOptions = 6;
+            else if (gameState.combo >= 50) maxOptions = 5;
+            else if (gameState.combo >= 20) maxOptions = 4;
+            const numDistractors = maxOptions - 1;
+
+            choices.sort(() => Math.random() - 0.5);
+
+            if (choices.length < numDistractors) {
+                const allLetters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('').filter(c => c !== correctLetter && !choices.includes(c));
+                allLetters.sort(() => Math.random() - 0.5);
+                choices = choices.concat(allLetters);
+            }
+
+            let distractors = choices.slice(0, numDistractors);
+            
+            // 智能回声：如果历史上有错误记录，优先使用历史错误字母作为干扰项
+            const currentWordObj = currentDictionary[gameState.currentWordIndex];
+            const wordKey = currentWordObj.word;
+            if (gameState.historicalMistakes[wordKey] && gameState.historicalMistakes[wordKey].length > 0) {
+                // 随机取一个历史错误字母替换掉一个默认干扰项
+                const histMistake = gameState.historicalMistakes[wordKey][Math.floor(Math.random() * gameState.historicalMistakes[wordKey].length)];
+                if (histMistake !== correctLetter && !distractors.includes(histMistake)) {
+                    distractors[0] = histMistake;
+                }
+            }
+            
+            return distractors;
+        }
+
+        function completeWord() {
+            gameState.isTransitioning = true;
+            gameState.activeOptions = []; // 清空当前选项
+
+            // 记录历史错误
+            const currentWordObj = currentDictionary[gameState.currentWordIndex];
+            speakWordPhrase(currentWordObj.word);
+            const wordKey = currentWordObj.word;
+            if (gameState.wordMistakeMap[wordKey] > 0) {
+                // 如果这个单词有错误，记录下来
+                if (!gameState.historicalMistakes[wordKey]) {
+                    gameState.historicalMistakes[wordKey] = [];
+                }
+                // 简单起见，这里只记录有错误发生，实际可以记录具体按错了哪个字母
+                // 这里我们假设在 handleMistake 中记录了具体字母，但为了简化，我们只记录单词错误次数
+            }
+
+            // 更新簇进度
+            gameState.wordsCompletedInCluster++;
+            dailyStats.wordsCompleted++;
+            saveDailyStats();
+            updateProgressGauge();
+
+            markWordLearned(currentDictName, currentWordObj.word);
+
+            // 在最后一个节点旁记录单词标签
+            const lastNode = gameState.nodes[gameState.nodes.length - 1];
+            gameState.wordLabels.push({
+                x: lastNode.x,
+                y: lastNode.y,
+                word: currentWordObj.word,
+                meaning: currentWordObj.meaning
+            });
+
+            // 显示完整单词和中文释义
+            const meaningDisplay = document.getElementById('meaningDisplay');
+            meaningDisplay.innerHTML = `
+                <div class="word">${formatWord(currentWordObj.word)}</div>
+                <div class="meaning">${currentWordObj.meaning}</div>
+            `;
+            meaningDisplay.classList.add('show-meaning');
+
+            // 1秒后切换到下一个单词或结算簇
+            setTimeout(() => {
+                meaningDisplay.classList.remove('show-meaning');
+                
+                if (gameState.wordsCompletedInCluster >= gameState.clusterSize) {
+                    settleCluster();
+                } else if (gameState.currentWordIndex + 1 >= currentDictionary.length) {
+                    // 词库所有单词已完成
+                    settleCluster();
+                } else {
+                    startNextWord();
+                }
+            }, 1000);
+        }
+
+        function startNextWord() {
+            gameState.currentWordIndex = (gameState.currentWordIndex + 1) % currentDictionary.length;
+            
+            const nextPhrase = currentDictionary[gameState.currentWordIndex].word;
+            gameState.parsedSteps = parsePhrase(nextPhrase);
+            gameState.currentStepIndex = 0;
+            
+            const lastNode = gameState.nodes[gameState.nodes.length - 1];
+            const firstStep = gameState.parsedSteps[0];
+            
+            const newRootY = lastNode.y - 150;
+            const newRootNode = new Node(width / 2, newRootY, firstStep.char, true);
+            newRootNode.state = 'completed';
+            newRootNode.scale = 0;
+            newRootNode.targetScale = 1;
+            
+            newRootNode.isNewTreeRoot = true;
+            gameState.nodes.push(newRootNode);
+            
+            gameState.currentWordStartIndex = gameState.nodes.length - 1;
+            
+            gameState.targetCameraY = height * 0.5 - newRootY;
+            gameState.targetCameraX = 0;
+            
+            gameState.isTransitioning = false;
+            updateUI();
+            advanceAfterStep(newRootNode);
+        }
+
+        function settleCluster() {
+            gameState.isSettling = true;
+            
+            // 视角拉远
+            gameState.targetCameraZoom = 0.5;
+            // 色相偏移 (例如每次偏移 60 度)
+            gameState.targetBgHue = (gameState.bgHue + 60) % 360;
+            
+            // 显示结算卡片
+            const card = document.getElementById('settlementCard');
+            const title = document.getElementById('settlementTitle');
+            const stats = document.getElementById('settlementStats');
+            
+            title.innerText = `Cluster Completed!`;
+            stats.innerText = `Words: ${gameState.clusterSize} | Mistakes: ${Object.values(gameState.wordMistakeMap).reduce((a, b) => a + b, 0)}`;
+            
+            card.classList.remove('hidden');
+            
+            // 3秒后恢复并进入下一个簇
+            setTimeout(() => {
+                card.classList.add('hidden');
+                
+                // 恢复视角
+                gameState.targetCameraZoom = 1.0;
+                
+                // 重置簇状态
+                gameState.wordsCompletedInCluster = 0;
+                gameState.wordMistakeMap = {};
+                updateProgressGauge();
+                
+                gameState.isSettling = false;
+                
+                // 检查是否还有下一个单词
+                if (gameState.currentWordIndex + 1 < currentDictionary.length) {
+                    // 先询问是否需要快速记忆
+                    promptQuickMemo();
+                } else {
+                    // 所有单词完成了，可以回到菜单
+                    alert('恭喜！你已完成所有单词！');
+                    document.getElementById('menuLayer').classList.remove('hidden');
+                    document.getElementById('uiLayer').classList.add('hidden');
+                }
+            }, 3000);
+        }
+
+        function skipWord() {
+            if (gameState.isTransitioning || gameState.isSettling || gameState.isAutoDrawing) return;
+            
+            const currentWordObj = currentDictionary[gameState.currentWordIndex];
+            const wordKey = currentWordObj.word;
+            gameState.wordMistakeMap[wordKey] = (gameState.wordMistakeMap[wordKey] || 0) + 5;
+            
+            let lastNode = gameState.nodes[gameState.nodes.length - 1];
+            
+            for (let i = gameState.currentStepIndex + 1; i < gameState.parsedSteps.length; i++) {
+                const step = gameState.parsedSteps[i];
+                const display = step.type === 'input' ? step.char : step.display;
+                const newNode = new Node(lastNode.x, lastNode.y - 60, display, true, lastNode);
+                newNode.state = 'completed';
+                if (step.type === 'auto') newNode.nodeType = step.subType;
+                gameState.nodes.push(newNode);
+                lastNode = newNode;
+            }
+            
+            gameState.currentStepIndex = gameState.parsedSteps.length - 1;
+            completeWord();
+        }
+
+        function pruneNode() {
+            if (gameState.isTransitioning || gameState.isSettling || gameState.isAutoDrawing) return;
+            if (gameState.currentStepIndex <= 0) return;
+            
+            const minNodeCount = gameState.currentWordStartIndex + 1;
+            if (gameState.nodes.length <= minNodeCount) return;
+            
+            let target = gameState.currentStepIndex - 1;
+            while (target > 0 && gameState.parsedSteps[target].type === 'auto') {
+                target--;
+            }
+            
+            const nodesToRemove = gameState.currentStepIndex - target;
+            for (let i = 0; i < nodesToRemove; i++) {
+                if (gameState.nodes.length > minNodeCount) gameState.nodes.pop();
+            }
+            gameState.currentStepIndex = target;
+            
+            const parentNode = gameState.nodes[gameState.nodes.length - 1];
+            gameState.targetCameraY = height * 0.5 - parentNode.y;
+            gameState.targetCameraX = width * 0.5 - parentNode.x;
+            
+            advanceAfterStep(parentNode);
+            updateUI();
+        }
+
+        // 初始化加载词库
+        loadDictionaries();
+        loadDailyStats();
+    </script>
+</body>
+</html>
