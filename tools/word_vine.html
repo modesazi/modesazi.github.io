@@ -506,6 +506,19 @@
         <div id="memoCountdown" style="font-size: 64px; font-weight: bold; color: #ff9800;">10</div>
     </div>
 
+    <!-- Tips 弹窗 -->
+    <div id="tipsModal" class="hidden" style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; background-color: rgba(0, 0, 0, 0.85); display: flex; flex-direction: column; align-items: center; justify-content: center; color: white; z-index: 30;">
+        <div style="background: #222; border: 1px solid #4CAF50; border-radius: 10px; padding: 20px; width: min(90vw, 500px); max-height: 80vh; display: flex; flex-direction: column; box-shadow: 0 0 20px rgba(76, 175, 80, 0.2);">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; border-bottom: 1px solid #444; padding-bottom: 10px;">
+                <h2 id="tipsWordTitle" style="margin: 0; color: #4CAF50; font-size: 24px;">Word</h2>
+                <button id="closeTipsBtn" style="background: none; border: none; color: #aaa; font-size: 24px; cursor: pointer; padding: 0;">&times;</button>
+            </div>
+            <div id="tipsContent" style="overflow-y: auto; flex-grow: 1; font-size: 14px; line-height: 1.6; color: #ddd;">
+                Loading...
+            </div>
+        </div>
+    </div>
+
     <script>
         // --- 1. 初始化 Canvas ---
         const canvas = document.getElementById('gameCanvas');
@@ -638,6 +651,65 @@
             utterance.volume = 1;
             window.speechSynthesis.speak(utterance);
         }
+
+        async function showTips(word) {
+            const modal = document.getElementById('tipsModal');
+            const title = document.getElementById('tipsWordTitle');
+            const content = document.getElementById('tipsContent');
+            
+            title.textContent = word;
+            content.innerHTML = '<div style="text-align: center; padding: 20px;">Loading...</div>';
+            modal.classList.remove('hidden');
+            
+            try {
+                const cleanWord = encodeURIComponent(word.trim());
+                const response = await fetch(`https://api.dictionaryapi.dev/api/v2/entries/en/${cleanWord}`);
+                
+                if (!response.ok) {
+                    throw new Error('Word not found');
+                }
+                
+                const data = await response.json();
+                const entry = data[0];
+                
+                let html = '';
+                
+                if (entry.phonetics && entry.phonetics.length > 0) {
+                    const phonetic = entry.phonetics.find(p => p.text) || entry.phonetics[0];
+                    if (phonetic && phonetic.text) {
+                        html += `<div style="color: #aaa; margin-bottom: 10px; font-family: monospace;">${phonetic.text}</div>`;
+                    }
+                }
+                
+                entry.meanings.forEach(meaning => {
+                    html += `<div style="margin-bottom: 15px;">`;
+                    html += `<div style="color: #4CAF50; font-weight: bold; margin-bottom: 5px; font-style: italic;">${meaning.partOfSpeech}</div>`;
+                    
+                    html += `<ul style="margin: 0; padding-left: 20px;">`;
+                    meaning.definitions.slice(0, 3).forEach(def => {
+                        html += `<li style="margin-bottom: 8px;">`;
+                        html += `<div>${def.definition}</div>`;
+                        if (def.example) {
+                            html += `<div style="color: #aaa; font-style: italic; margin-top: 4px;">"${def.example}"</div>`;
+                        }
+                        html += `</li>`;
+                    });
+                    html += `</ul>`;
+                    html += `</div>`;
+                });
+                
+                content.innerHTML = html;
+            } catch (error) {
+                content.innerHTML = `<div style="text-align: center; padding: 20px; color: #f44336;">
+                    <p>Could not fetch details for "${word}".</p>
+                    <p style="font-size: 12px; color: #aaa;">It might be a phrase or not in the dictionary.</p>
+                </div>`;
+            }
+        }
+
+        document.getElementById('closeTipsBtn').addEventListener('click', () => {
+            document.getElementById('tipsModal').classList.add('hidden');
+        });
 
         let dictionaries = {};
         const CLUSTER_SIZE_MIN = 3;
@@ -1727,35 +1799,110 @@
             // 绘制单词标签
             gameState.wordLabels.forEach(label => {
                 const wordText = formatWord(label.word);
-                const iconText = '🔊';
-                const textX = label.x + 30;
+                const speakerIcon = '🔊';
+                const tipsIcon = '📖';
+                
+                ctx.save();
+                ctx.font = 'bold 14px Courier New';
+                const wordWidth = ctx.measureText(wordText).width;
+                ctx.font = '13px sans-serif';
+                const speakerWidth = ctx.measureText(speakerIcon).width;
+                const tipsWidth = ctx.measureText(tipsIcon).width;
+                ctx.font = '12px sans-serif';
+                const meaningWidth = ctx.measureText(label.meaning).width;
+                
+                const iconsWidth = speakerWidth + 8 + tipsWidth;
+                const rightTotalWidth = wordWidth + 8 + iconsWidth;
+                const rightMeaningWidth = meaningWidth;
+                
+                // 世界坐标 → 屏幕坐标: screenX = (worldX + cameraX - width/2) * zoom + width/2
+                // 屏幕坐标 → 世界坐标: worldX = (screenX - width/2) / zoom + width/2 - cameraX
+                function worldToScreenX(wx) {
+                    return (wx + gameState.cameraX - width / 2) * gameState.cameraZoom + width / 2;
+                }
+                function screenToWorldX(sx) {
+                    return (sx - width / 2) / gameState.cameraZoom + width / 2 - gameState.cameraX;
+                }
+                
+                // 默认: 标签在节点右侧，左对齐
+                let textX = label.x + 30;
+                let align = 'left';
+                
+                const screenRight = worldToScreenX(textX) + Math.max(rightTotalWidth, rightMeaningWidth) * gameState.cameraZoom;
+                
+                if (screenRight > width - 10) {
+                    // 超出右边界，翻到左侧，右对齐
+                    textX = label.x - 30;
+                    align = 'right';
+                    
+                    // 检查左侧是否也超出
+                    const leftTotalWidth = Math.max(wordWidth + 8 + iconsWidth, meaningWidth);
+                    const screenLeft = worldToScreenX(textX - leftTotalWidth);
+                    if (screenLeft < 10) {
+                        // 左右都放不下，强制左对齐到屏幕左缘
+                        align = 'left';
+                        textX = screenToWorldX(40);
+                    }
+                }
+
                 const wordY = label.y - 8;
                 const meaningY = label.y + 10;
 
-                ctx.save();
-                ctx.font = 'bold 14px Courier New';
-                ctx.textAlign = 'left';
+                ctx.textAlign = align;
                 ctx.textBaseline = 'middle';
+                
+                // 绘制单词
+                ctx.font = 'bold 14px Courier New';
                 ctx.fillStyle = 'rgba(76, 175, 80, 0.7)';
                 ctx.fillText(wordText, textX, wordY);
-                const wordWidth = ctx.measureText(wordText).width;
+                
+                // 计算图标位置（图标始终在单词右侧，紧跟单词）
+                let speakerX, tipsX;
+                if (align === 'left') {
+                    speakerX = textX + wordWidth + 8;
+                    tipsX = speakerX + speakerWidth + 8;
+                } else {
+                    // 右对齐时，图标放在 textX 右侧（textX 和节点之间的间隙）
+                    speakerX = textX + 8;
+                    tipsX = speakerX + speakerWidth + 8;
+                }
 
+                // 绘制图标
                 ctx.font = '13px sans-serif';
                 ctx.fillStyle = 'rgba(76, 175, 80, 0.65)';
-                ctx.fillText(iconText, textX + wordWidth + 8, wordY + 1);
-                const iconWidth = ctx.measureText(iconText).width;
+                ctx.textAlign = 'left';
+                ctx.fillText(speakerIcon, speakerX, wordY + 1);
+                ctx.fillText(tipsIcon, tipsX, wordY + 1);
 
+                // 绘制释义
                 ctx.font = '12px sans-serif';
                 ctx.fillStyle = 'rgba(255, 255, 255, 0.5)';
+                ctx.textAlign = align;
                 ctx.fillText(label.meaning, textX, meaningY);
-                const meaningWidth = ctx.measureText(label.meaning).width;
+                
                 ctx.restore();
 
+                // 计算点击区域（世界坐标）
+                const labelLeft = align === 'left' ? textX : textX - wordWidth;
+                const labelRight = align === 'left' ? tipsX + tipsWidth : tipsX + tipsWidth;
+                
+                // 整个单词+发音区域（不含 tips）
                 gameState.labelHitAreas.push({
-                    x: textX - 4,
+                    type: 'speech',
+                    x: labelLeft - 4,
                     y: wordY - 12,
-                    w: Math.max(wordWidth + 8 + iconWidth, meaningWidth) + 8,
+                    w: (speakerX + speakerWidth) - labelLeft + 8,
                     h: 32,
+                    word: label.word
+                });
+
+                // Tips 图标区域
+                gameState.labelHitAreas.push({
+                    type: 'tips',
+                    x: tipsX - 4,
+                    y: wordY - 12,
+                    w: tipsWidth + 8,
+                    h: 24,
                     word: label.word
                 });
             });
@@ -2111,7 +2258,11 @@
                 for (let i = gameState.labelHitAreas.length - 1; i >= 0; i--) {
                     const area = gameState.labelHitAreas[i];
                     if (worldPoint.x >= area.x && worldPoint.x <= area.x + area.w && worldPoint.y >= area.y && worldPoint.y <= area.y + area.h) {
-                        speakWordPhrase(area.word);
+                        if (area.type === 'tips') {
+                            showTips(area.word);
+                        } else {
+                            speakWordPhrase(area.word);
+                        }
                         gameState.isDragging = false;
                         gameState.dragMoved = false;
                         return;
