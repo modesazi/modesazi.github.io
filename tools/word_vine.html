@@ -135,9 +135,14 @@
             display: flex;
             flex-direction: column;
             align-items: center;
-            justify-content: center;
+            justify-content: flex-start;
             color: white;
             z-index: 10;
+            overflow-y: auto;
+            -webkit-overflow-scrolling: touch;
+            touch-action: pan-y;
+            box-sizing: border-box;
+            padding: 12px 0;
         }
         .menu-box {
             background: #222;
@@ -147,6 +152,17 @@
             width: 80%;
             max-width: 500px;
             text-align: center;
+            max-height: calc(100dvh - 24px);
+            overflow-y: auto;
+            -webkit-overflow-scrolling: touch;
+            touch-action: pan-y;
+            margin: auto 0;
+        }
+        .menu-view {
+            width: 100%;
+        }
+        #menuSettingsView {
+            text-align: left;
         }
         textarea {
             width: 100%;
@@ -371,27 +387,53 @@
     <div id="menuLayer">
         <div class="menu-box">
             <h1 style="color: #4CAF50; margin-top: 0;">Word Vine</h1>
-            
-            <h3>选择词库</h3>
-            <div style="display: flex; gap: 10px; width: 100%; margin-bottom: 20px;">
-                <select id="dictSelect" style="margin-bottom: 0; flex-grow: 1;"></select>
-                <button id="resetDictBtn" style="background: #ff9800; margin: 0;">重置</button>
-                <button id="deleteDictBtn" style="background: #f44336; margin: 0;">删除</button>
+
+            <div id="menuMainView" class="menu-view">
+                <h3>选择词库</h3>
+                <div style="display: flex; gap: 10px; width: 100%; margin-bottom: 20px;">
+                    <select id="dictSelect" style="margin-bottom: 0; flex-grow: 1;"></select>
+                </div>
+                <button id="startBtn" style="width: 100%;">开始游戏</button>
+                <button id="openSettingsBtn" style="width: 100%; background: #333; border: 1px solid #555;">设置</button>
             </div>
-            <button id="startBtn">开始游戏</button>
-            
-            <hr style="border-color: #333; margin: 20px 0;">
-            
-            <h3>导入新词库 (JSON)</h3>
-            <p style="font-size: 12px; color: #aaa; text-align: left;">格式: {"apple": "苹果", "tree": "树"}</p>
-            <input type="text" id="dictNameInput" placeholder="词库名称 (如: CET4)" style="width: 100%; padding: 10px; margin-bottom: 10px; box-sizing: border-box; background: #111; color: white; border: 1px solid #333;">
-            <textarea id="importData" placeholder='{"word": "meaning"}'></textarea>
-            <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 10px;">
-                <input type="file" id="fileInput" accept=".json" style="display: none;">
-                <button id="loadFileBtn" style="background: #333; border: 1px solid #555;">从文件加载</button>
-                <button id="importBtn">保存并导入</button>
+
+            <div id="menuSettingsView" class="menu-view hidden">
+                <h3 style="margin-bottom: 14px;">设置</h3>
+                <div style="display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 16px;">
+                    <span style="font-size: 14px; color: #ccc;">每组单词数量</span>
+                    <input id="clusterSizeInput" type="number" min="3" max="30" step="1" value="7" style="width: 96px; padding: 8px 10px; box-sizing: border-box; background: #111; color: #4CAF50; border: 1px solid #333; border-radius: 5px; text-align: center; font-family: inherit; font-size: 16px;">
+                </div>
+
+                <div style="margin-bottom: 12px;">
+                    <div style="font-size: 14px; color: #ccc; margin-bottom: 8px;">词库管理</div>
+                    <div id="dictManageList" style="display: flex; flex-direction: column; gap: 8px;"></div>
+                </div>
+
+                <hr style="border-color: #333; margin: 16px 0;">
+
+                <h3 style="margin: 0 0 10px 0;">导入新词库 (JSON)</h3>
+                <p style="font-size: 12px; color: #aaa; text-align: left;">格式: {"apple": "苹果", "tree": "树"}</p>
+                <input type="text" id="dictNameInput" placeholder="词库名称 (如: CET4)" style="width: 100%; padding: 10px; margin-bottom: 10px; box-sizing: border-box; background: #111; color: white; border: 1px solid #333;">
+                <textarea id="importData" placeholder='{"word": "meaning"}'></textarea>
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 10px;">
+                    <input type="file" id="fileInput" accept=".json" style="display: none;">
+                    <button id="loadFileBtn" style="background: #333; border: 1px solid #555;">从文件加载</button>
+                    <button id="importBtn">保存并导入</button>
+                </div>
+                <div id="importMsg" style="color: #f44336; font-size: 14px; margin-top: 10px;"></div>
+
+                <hr style="border-color: #333; margin: 16px 0;">
+
+                <h3 style="margin: 0 0 10px 0;">进度迁移</h3>
+                <p style="font-size: 12px; color: #aaa; text-align: left; margin: 0 0 8px 0;">导出为 JSON，可在另一台设备（即使没有词库）完整导入。</p>
+                <div style="display: flex; justify-content: space-between; align-items: center; gap: 10px; margin-top: 8px;">
+                    <input type="file" id="progressFileInput" accept=".json" style="display: none;">
+                    <button id="exportProgressBtn" style="background: #2e7d32; border: 1px solid #3d8f42; flex: 1;">导出进度</button>
+                    <button id="importProgressBtn" style="background: #1565c0; border: 1px solid #2a76ca; flex: 1;">导入进度</button>
+                </div>
+                <div id="progressTransferMsg" style="color: #f44336; font-size: 14px; margin-top: 10px;"></div>
+                <button id="closeSettingsBtn" style="width: 100%; background: #555; margin-top: 16px;">返回</button>
             </div>
-            <div id="importMsg" style="color: #f44336; font-size: 14px; margin-top: 10px;"></div>
         </div>
     </div>
 
@@ -598,6 +640,10 @@
         }
 
         let dictionaries = {};
+        const CLUSTER_SIZE_MIN = 3;
+        const CLUSTER_SIZE_MAX = 30;
+        const DEFAULT_CLUSTER_SIZE = 7;
+        const BACKUP_FORMAT_VERSION = 1;
         
         let currentDictionary = null;
         let currentDictName = '';
@@ -633,6 +679,152 @@
             localStorage.setItem('wordVineProgress', JSON.stringify(all));
         }
 
+        function normalizeClusterSize(value) {
+            const n = Number(value);
+            if (!Number.isFinite(n)) return DEFAULT_CLUSTER_SIZE;
+            return Math.max(CLUSTER_SIZE_MIN, Math.min(CLUSTER_SIZE_MAX, Math.round(n)));
+        }
+
+        function normalizeDictionaryEntries(raw) {
+            const result = {};
+            if (!raw || typeof raw !== 'object') return result;
+
+            Object.keys(raw).forEach(name => {
+                const source = raw[name];
+                const list = [];
+
+                if (Array.isArray(source)) {
+                    source.forEach(item => {
+                        if (item && typeof item.word === 'string' && typeof item.meaning === 'string') {
+                            const word = item.word.trim();
+                            const meaning = item.meaning.trim();
+                            if (word && meaning) list.push({ word, meaning });
+                        }
+                    });
+                } else if (source && typeof source === 'object') {
+                    Object.keys(source).forEach(wordKey => {
+                        const meaningVal = source[wordKey];
+                        if (typeof wordKey === 'string' && typeof meaningVal === 'string') {
+                            const word = wordKey.trim();
+                            const meaning = meaningVal.trim();
+                            if (word && meaning) list.push({ word, meaning });
+                        }
+                    });
+                }
+
+                if (list.length > 0) {
+                    result[name] = list;
+                }
+            });
+
+            return result;
+        }
+
+        function exportAllDataToFile() {
+            const backup = {
+                meta: {
+                    app: 'Word Vine',
+                    format: 'word-vine-backup',
+                    version: BACKUP_FORMAT_VERSION,
+                    exportedAt: new Date().toISOString()
+                },
+                data: {
+                    dictionaries,
+                    learningProgress: (() => {
+                        const saved = localStorage.getItem('wordVineProgress');
+                        if (!saved) return {};
+                        try { return JSON.parse(saved) || {}; } catch (e) { return {}; }
+                    })(),
+                    dailyStats: (() => {
+                        const saved = localStorage.getItem('wordVineDailyStats');
+                        if (!saved) return { ...dailyStats };
+                        try { return JSON.parse(saved) || { ...dailyStats }; } catch (e) { return { ...dailyStats }; }
+                    })(),
+                    settings: {
+                        clusterSize: normalizeClusterSize(gameState.clusterSize)
+                    }
+                }
+            };
+
+            const json = JSON.stringify(backup, null, 2);
+            const blob = new Blob([json], { type: 'application/json;charset=utf-8' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            const stamp = new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-');
+            a.href = url;
+            a.download = `word-vine-backup-${stamp}.json`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+        }
+
+        function importAllDataObject(payload) {
+            const data = payload && payload.data ? payload.data : payload;
+            if (!data || typeof data !== 'object') {
+                throw new Error('文件内容无效');
+            }
+
+            const nextDictionaries = normalizeDictionaryEntries(data.dictionaries);
+            const nextProgress = data.learningProgress && typeof data.learningProgress === 'object' ? data.learningProgress : {};
+            const nextDailyStats = data.dailyStats && typeof data.dailyStats === 'object' ? data.dailyStats : {};
+            const settings = data.settings && typeof data.settings === 'object' ? data.settings : {};
+
+            dictionaries = nextDictionaries;
+            localStorage.setItem('wordVineDicts', JSON.stringify(dictionaries));
+            localStorage.setItem('wordVineProgress', JSON.stringify(nextProgress));
+
+            const normalizedDaily = {
+                date: typeof nextDailyStats.date === 'string' ? nextDailyStats.date : new Date().toDateString(),
+                wordsCompleted: Number(nextDailyStats.wordsCompleted) || 0,
+                mistakes: Number(nextDailyStats.mistakes) || 0,
+                deaths: Number(nextDailyStats.deaths) || 0
+            };
+            dailyStats.date = normalizedDaily.date;
+            dailyStats.wordsCompleted = normalizedDaily.wordsCompleted;
+            dailyStats.mistakes = normalizedDaily.mistakes;
+            dailyStats.deaths = normalizedDaily.deaths;
+            localStorage.setItem('wordVineDailyStats', JSON.stringify(normalizedDaily));
+
+            const normalizedClusterSize = normalizeClusterSize(settings.clusterSize);
+            gameState.clusterSize = normalizedClusterSize;
+            const selectedDictName = typeof settings.selectedDictName === 'string' ? settings.selectedDictName : '';
+            localStorage.setItem('wordVineSettings', JSON.stringify({ clusterSize: normalizedClusterSize, selectedDictName }));
+            const clusterInput = document.getElementById('clusterSizeInput');
+            if (clusterInput) clusterInput.value = String(normalizedClusterSize);
+
+            updateDictSelect(selectedDictName);
+            saveGameSettings();
+        }
+
+        function saveGameSettings() {
+            const select = document.getElementById('dictSelect');
+            const selectedDictName = select ? (select.value || '') : '';
+            localStorage.setItem('wordVineSettings', JSON.stringify({
+                clusterSize: gameState.clusterSize,
+                selectedDictName
+            }));
+        }
+
+        function loadGameSettings() {
+            let clusterSize = DEFAULT_CLUSTER_SIZE;
+            let selectedDictName = '';
+            const saved = localStorage.getItem('wordVineSettings');
+            if (saved) {
+                try {
+                    const parsed = JSON.parse(saved);
+                    clusterSize = normalizeClusterSize(parsed.clusterSize);
+                    if (typeof parsed.selectedDictName === 'string') {
+                        selectedDictName = parsed.selectedDictName;
+                    }
+                } catch (e) {}
+            }
+            gameState.clusterSize = clusterSize;
+            const input = document.getElementById('clusterSizeInput');
+            if (input) input.value = String(clusterSize);
+            updateDictSelect(selectedDictName);
+        }
+
         // 加载本地缓存的词库
         function loadDictionaries() {
             const saved = localStorage.getItem('wordVineDicts');
@@ -648,9 +840,11 @@
         }
 
         // 更新下拉菜单
-        function updateDictSelect() {
+        function updateDictSelect(preferredName = '') {
             const select = document.getElementById('dictSelect');
+            const previousSelected = preferredName || select.value;
             select.innerHTML = '';
+            const names = Object.keys(dictionaries);
             for (const name in dictionaries) {
                 const option = document.createElement('option');
                 option.value = name;
@@ -659,6 +853,135 @@
                 option.textContent = `${name} (${learned}/${total})`;
                 select.appendChild(option);
             }
+
+            if (names.length > 0) {
+                if (previousSelected && names.includes(previousSelected)) {
+                    select.value = previousSelected;
+                } else {
+                    select.value = names[0];
+                }
+            }
+
+            renderDictionaryManagerList();
+        }
+
+        function renderDictionaryManagerList() {
+            const list = document.getElementById('dictManageList');
+            if (!list) return;
+            list.innerHTML = '';
+
+            const names = Object.keys(dictionaries);
+            if (names.length === 0) {
+                const empty = document.createElement('div');
+                empty.style.cssText = 'color:#888; font-size:13px; text-align:left; padding:6px 2px;';
+                empty.textContent = '暂无词库';
+                list.appendChild(empty);
+                return;
+            }
+
+            names.forEach((name) => {
+                const row = document.createElement('div');
+                row.style.cssText = 'display:flex; align-items:center; justify-content:space-between; gap:8px; background:#1a1a1a; border:1px solid #333; border-radius:6px; padding:8px;';
+
+                const title = document.createElement('div');
+                title.style.cssText = 'color:#ddd; font-size:13px; flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; text-align:left;';
+                title.textContent = `${name} (${getLearnedCount(name)}/${dictionaries[name].length})`;
+
+                const actions = document.createElement('div');
+                actions.style.cssText = 'display:flex; gap:6px;';
+
+                const renameBtn = document.createElement('button');
+                renameBtn.type = 'button';
+                renameBtn.dataset.action = 'rename';
+                renameBtn.dataset.dict = name;
+                renameBtn.textContent = '改名';
+                renameBtn.style.cssText = 'background:#1976d2; margin:0; padding:6px 10px; font-size:12px;';
+
+                const resetBtn = document.createElement('button');
+                resetBtn.type = 'button';
+                resetBtn.dataset.action = 'reset';
+                resetBtn.dataset.dict = name;
+                resetBtn.textContent = '重置';
+                resetBtn.style.cssText = 'background:#ff9800; margin:0; padding:6px 10px; font-size:12px;';
+
+                const deleteBtn = document.createElement('button');
+                deleteBtn.type = 'button';
+                deleteBtn.dataset.action = 'delete';
+                deleteBtn.dataset.dict = name;
+                deleteBtn.textContent = '删除';
+                deleteBtn.style.cssText = 'background:#f44336; margin:0; padding:6px 10px; font-size:12px;';
+
+                actions.appendChild(renameBtn);
+                actions.appendChild(resetBtn);
+                actions.appendChild(deleteBtn);
+                row.appendChild(title);
+                row.appendChild(actions);
+                list.appendChild(row);
+            });
+        }
+
+        function renameDictionary(dictName) {
+            if (!dictionaries[dictName]) return;
+            const input = prompt(`请输入新的词库名称：`, dictName);
+            if (input === null) return;
+
+            const nextName = input.trim();
+            if (!nextName) {
+                alert('词库名称不能为空');
+                return;
+            }
+            if (nextName === dictName) return;
+            if (dictionaries[nextName]) {
+                alert(`词库名称 "${nextName}" 已存在`);
+                return;
+            }
+
+            dictionaries[nextName] = dictionaries[dictName];
+            delete dictionaries[dictName];
+            localStorage.setItem('wordVineDicts', JSON.stringify(dictionaries));
+
+            let allProgress = {};
+            const savedProgress = localStorage.getItem('wordVineProgress');
+            if (savedProgress) {
+                try { allProgress = JSON.parse(savedProgress) || {}; } catch (e) {}
+            }
+            if (allProgress[dictName]) {
+                allProgress[nextName] = allProgress[dictName];
+                delete allProgress[dictName];
+                localStorage.setItem('wordVineProgress', JSON.stringify(allProgress));
+            }
+
+            if (currentDictName === dictName) {
+                currentDictName = nextName;
+            }
+
+            updateDictSelect(nextName);
+            saveGameSettings();
+        }
+
+        function resetDictionaryRecords(dictName) {
+            if (!dictionaries[dictName]) return;
+            const ok = confirm(`将清除词库 "${dictName}" 的所有学习记录，是否继续？`);
+            if (!ok) return;
+            dailyStats.wordsCompleted = 0;
+            dailyStats.mistakes = 0;
+            dailyStats.deaths = 0;
+            saveDailyStats();
+            gameState.historicalMistakes = {};
+            gameState.wordMistakeMap = {};
+            clearLearningProgress(dictName);
+            updateDictSelect();
+            alert(`词库 "${dictName}" 的学习记录已重置！`);
+        }
+
+        function deleteDictionary(dictName) {
+            if (!dictionaries[dictName]) return;
+            const ok = confirm(`删除词库 "${dictName}" 后无法恢复，是否继续？`);
+            if (!ok) return;
+            delete dictionaries[dictName];
+            localStorage.setItem('wordVineDicts', JSON.stringify(dictionaries));
+            clearLearningProgress(dictName);
+            updateDictSelect();
         }
 
         // 导入新词库
@@ -701,10 +1024,8 @@
                 
                 localStorage.setItem('wordVineDicts', JSON.stringify(dictionaries));
                 
-                updateDictSelect();
-                
-                // 选中新导入的词库
-                document.getElementById('dictSelect').value = nameInput;
+                updateDictSelect(nameInput);
+                saveGameSettings();
                 
                 msgDiv.textContent = `成功导入 ${newDict.length} 个单词！`;
                 msgDiv.style.color = "#4CAF50";
@@ -756,36 +1077,75 @@
             reader.readAsText(file);
         });
 
-        // 删除词库
-        document.getElementById('deleteDictBtn').addEventListener('click', () => {
-            const selectedName = document.getElementById('dictSelect').value;
-            if (!selectedName) {
-                alert("请先选择一个词库！");
-                return;
+        document.getElementById('exportProgressBtn').addEventListener('click', () => {
+            const msgDiv = document.getElementById('progressTransferMsg');
+            try {
+                exportAllDataToFile();
+                msgDiv.textContent = '导出成功';
+                msgDiv.style.color = '#4CAF50';
+            } catch (e) {
+                msgDiv.textContent = '导出失败: ' + e.message;
+                msgDiv.style.color = '#f44336';
             }
-            const input = prompt(`删除词库 "${selectedName}" 后无法恢复！\n请输入“确认”以继续：`);
-            if (input !== '确认') return;
-            delete dictionaries[selectedName];
-            localStorage.setItem('wordVineDicts', JSON.stringify(dictionaries));
-            clearLearningProgress(selectedName);
-            updateDictSelect();
         });
 
-        // 重置词库学习记录
-        document.getElementById('resetDictBtn').addEventListener('click', () => {
-            const selectedName = document.getElementById('dictSelect').value;
-            const input = prompt(`将清除词库 "${selectedName}" 的所有学习记录！\n请输入“确认”以继续：`);
-            if (input !== '确认') return;
-            dailyStats.wordsCompleted = 0;
-            dailyStats.mistakes = 0;
-            dailyStats.deaths = 0;
-            saveDailyStats();
-            gameState.historicalMistakes = {};
-            gameState.wordMistakeMap = {};
-            clearLearningProgress(selectedName);
-            updateDictSelect();
-            alert(`词库 "${selectedName}" 的学习记录已重置！`);
+        document.getElementById('importProgressBtn').addEventListener('click', () => {
+            document.getElementById('progressFileInput').click();
         });
+
+        document.getElementById('progressFileInput').addEventListener('change', (event) => {
+            const file = event.target.files[0];
+            if (!file) return;
+            const msgDiv = document.getElementById('progressTransferMsg');
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                try {
+                    const payload = JSON.parse(e.target.result);
+                    const data = payload && payload.data ? payload.data : payload;
+                    const incomingDicts = normalizeDictionaryEntries(data && data.dictionaries ? data.dictionaries : {});
+                    const dictCount = Object.keys(incomingDicts).length;
+                    const wordCount = Object.values(incomingDicts).reduce((sum, list) => sum + list.length, 0);
+                    const ok = confirm(`将覆盖本地词库与学习进度。\n即将导入：${dictCount} 个词库，${wordCount} 个词条。\n是否继续？`);
+                    if (!ok) {
+                        msgDiv.textContent = '已取消导入';
+                        msgDiv.style.color = '#aaa';
+                        return;
+                    }
+                    importAllDataObject(payload);
+                    msgDiv.textContent = '导入成功，已恢复词库和学习进度';
+                    msgDiv.style.color = '#4CAF50';
+                } catch (err) {
+                    msgDiv.textContent = '导入失败: ' + err.message;
+                    msgDiv.style.color = '#f44336';
+                }
+                event.target.value = '';
+            };
+            reader.readAsText(file);
+        });
+
+        const dictManageList = document.getElementById('dictManageList');
+        if (dictManageList) {
+            dictManageList.addEventListener('click', (e) => {
+                const btn = e.target.closest('button[data-action][data-dict]');
+                if (!btn) return;
+                const dictName = btn.dataset.dict;
+                if (!dictName) return;
+                if (btn.dataset.action === 'rename') {
+                    renameDictionary(dictName);
+                } else if (btn.dataset.action === 'reset') {
+                    resetDictionaryRecords(dictName);
+                } else if (btn.dataset.action === 'delete') {
+                    deleteDictionary(dictName);
+                }
+            });
+        }
+
+        const dictSelect = document.getElementById('dictSelect');
+        if (dictSelect) {
+            dictSelect.addEventListener('change', () => {
+                saveGameSettings();
+            });
+        }
 
         // 开始游戏按钮
         document.getElementById('startBtn').addEventListener('click', () => {
@@ -794,6 +1154,13 @@
                 alert("请先导入一个词库！");
                 return;
             }
+
+            const clusterInput = document.getElementById('clusterSizeInput');
+            const clusterSize = normalizeClusterSize(clusterInput ? clusterInput.value : DEFAULT_CLUSTER_SIZE);
+            gameState.clusterSize = clusterSize;
+            if (clusterInput) clusterInput.value = String(clusterSize);
+            saveGameSettings();
+
             currentDictName = selectedName;
             const fullDict = dictionaries[selectedName];
             const progress = getLearningProgress(selectedName);
@@ -814,6 +1181,14 @@
                 gameLoopRunning = true;
                 requestAnimationFrame(gameLoop);
             }
+        });
+
+        document.getElementById('openSettingsBtn').addEventListener('click', () => {
+            showMenuSettingsView();
+        });
+
+        document.getElementById('closeSettingsBtn').addEventListener('click', () => {
+            showMenuMainView();
         });
 
         const gameState = {
@@ -846,6 +1221,7 @@
             wordMistakeMap: {}, // 记录每个单词的错误次数，用于扎根挑战
             wordLabels: [],
             labelHitAreas: [],
+            clickEffects: [],
             parsedSteps: [],
             isAutoDrawing: false,
             isDragging: false,
@@ -854,6 +1230,16 @@
             dragMoved: false,
             isBrowsing: false
         };
+
+        const clusterSizeInput = document.getElementById('clusterSizeInput');
+        if (clusterSizeInput) {
+            clusterSizeInput.addEventListener('change', () => {
+                const value = normalizeClusterSize(clusterSizeInput.value);
+                clusterSizeInput.value = String(value);
+                gameState.clusterSize = value;
+                saveGameSettings();
+            });
+        }
 
         gameStateReady = true;
 
@@ -914,6 +1300,16 @@
             gameState.isTransitioning = true;
         }
 
+        function showMenuMainView() {
+            document.getElementById('menuMainView').classList.remove('hidden');
+            document.getElementById('menuSettingsView').classList.add('hidden');
+        }
+
+        function showMenuSettingsView() {
+            document.getElementById('menuMainView').classList.add('hidden');
+            document.getElementById('menuSettingsView').classList.remove('hidden');
+        }
+
         function hideDailyStats() {
             document.getElementById('dailyStatsOverlay').classList.add('hidden');
             gameState.isTransitioning = false;
@@ -925,6 +1321,7 @@
             gameLoopRunning = false;
             document.getElementById('uiLayer').classList.add('hidden');
             document.getElementById('menuLayer').classList.remove('hidden');
+            showMenuMainView();
             updateDictSelect();
         }
 
@@ -1084,6 +1481,7 @@
             gameState.historicalMistakes = {};
             gameState.wordMistakeMap = {};
             gameState.wordLabels = [];
+            gameState.clickEffects = [];
             gameState.cameraZoom = 1;
             gameState.targetCameraZoom = 1;
             gameState.bgHue = 120;
@@ -1172,6 +1570,7 @@
             gameState.nodes.forEach(node => node.update(dt));
             gameState.activeOptions.forEach(node => node.update(dt));
             gameState.fadingNodes.forEach(node => node.update(dt));
+            updateClickEffects(dt);
             
             // 清理完全透明的节点
             gameState.fadingNodes = gameState.fadingNodes.filter(node => node.alpha > 0);
@@ -1198,6 +1597,7 @@
             // 绘制藤蔓和节点
             drawVines();
             drawNodes();
+            drawClickEffects();
 
             ctx.restore();
 
@@ -1510,6 +1910,117 @@
             ctx.restore();
         }
 
+        function createClickEffect(node, isCorrect) {
+            const baseColor = isCorrect ? [76, 235, 120] : [255, 90, 90];
+            const particles = [];
+            const comboBoost = Math.min(2.2, 1 + Math.max(0, gameState.combo - 1) * 0.025);
+            const count = Math.round((isCorrect ? 16 : 12) * comboBoost);
+            for (let i = 0; i < count; i++) {
+                const angle = (Math.PI * 2 * i) / count + Math.random() * 0.45;
+                const speed = ((isCorrect ? 2.5 : 2.1) + Math.random() * 2.2) * (0.9 + comboBoost * 0.25);
+                particles.push({
+                    x: node.x,
+                    y: node.y,
+                    vx: Math.cos(angle) * speed,
+                    vy: Math.sin(angle) * speed,
+                    size: ((isCorrect ? 2.6 : 2.1) + Math.random() * 2) * (0.9 + comboBoost * 0.18),
+                    alpha: 1,
+                    drag: 0.965 + Math.random() * 0.015
+                });
+            }
+            const baseLife = isCorrect ? 420 : 320;
+            const life = Math.round(baseLife * (0.92 + comboBoost * 0.22));
+            gameState.clickEffects.push({
+                x: node.x,
+                y: node.y,
+                life,
+                maxLife: life,
+                ringRadius: node.radius * 0.6,
+                ringGrow: (isCorrect ? 2.9 : 2.3) * (0.9 + comboBoost * 0.25),
+                ringWidth: (isCorrect ? 3.2 : 2.6) * (0.88 + comboBoost * 0.15),
+                color: baseColor,
+                particles
+            });
+        }
+
+        function createWordCompleteEffect(node) {
+            if (!node) return;
+            const burst = (scale, color) => {
+                const particles = [];
+                const count = Math.round(34 * scale);
+                for (let i = 0; i < count; i++) {
+                    const angle = (Math.PI * 2 * i) / count + Math.random() * 0.35;
+                    const speed = (3.4 + Math.random() * 3.1) * scale;
+                    particles.push({
+                        x: node.x,
+                        y: node.y,
+                        vx: Math.cos(angle) * speed,
+                        vy: Math.sin(angle) * speed,
+                        size: (3 + Math.random() * 2.8) * scale,
+                        alpha: 1,
+                        drag: 0.968 + Math.random() * 0.012
+                    });
+                }
+                const life = Math.round(520 * scale);
+                gameState.clickEffects.push({
+                    x: node.x,
+                    y: node.y,
+                    life,
+                    maxLife: life,
+                    ringRadius: node.radius * (0.7 + 0.4 * scale),
+                    ringGrow: 4.2 * scale,
+                    ringWidth: 4.2 * scale,
+                    color,
+                    particles
+                });
+            };
+
+            burst(1.25, [125, 255, 170]);
+            setTimeout(() => burst(1.0, [76, 235, 120]), 90);
+            setTimeout(() => burst(0.85, [190, 255, 220]), 170);
+        }
+
+        function updateClickEffects(dt) {
+            if (gameState.clickEffects.length === 0) return;
+            const step = Math.max(0.6, Math.min(2.4, dt / 16.666));
+            gameState.clickEffects.forEach(fx => {
+                fx.life -= dt;
+                fx.ringRadius += fx.ringGrow * step;
+                fx.particles.forEach(p => {
+                    p.x += p.vx * step;
+                    p.y += p.vy * step;
+                    p.vx *= p.drag;
+                    p.vy *= p.drag;
+                    p.alpha *= 0.92;
+                });
+                fx.particles = fx.particles.filter(p => p.alpha > 0.06);
+            });
+            gameState.clickEffects = gameState.clickEffects.filter(fx => fx.life > 0 && fx.particles.length > 0);
+        }
+
+        function drawClickEffects() {
+            if (gameState.clickEffects.length === 0) return;
+            ctx.save();
+            ctx.globalCompositeOperation = 'lighter';
+            gameState.clickEffects.forEach(fx => {
+                const k = Math.max(0, fx.life / fx.maxLife);
+                const c = fx.color;
+                ctx.strokeStyle = `rgba(${c[0]}, ${c[1]}, ${c[2]}, ${0.38 * k})`;
+                ctx.lineWidth = fx.ringWidth * (0.7 + 0.6 * k);
+                ctx.beginPath();
+                ctx.arc(fx.x, fx.y, fx.ringRadius, 0, Math.PI * 2);
+                ctx.stroke();
+
+                fx.particles.forEach(p => {
+                    ctx.fillStyle = `rgba(${c[0]}, ${c[1]}, ${c[2]}, ${Math.min(1, p.alpha * k)})`;
+                    ctx.beginPath();
+                    ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+                    ctx.fill();
+                });
+            });
+            ctx.restore();
+        }
+
         // --- 5. 双模输入与核心机制 ---
         function screenToWorld(screenX, screenY) {
             const centerX = width / 2;
@@ -1665,6 +2176,7 @@
 
         function advanceNode(selectedOption) {
             playCorrectNote();
+            createClickEffect(selectedOption, true);
             const margin = 40;
             selectedOption.x = Math.max(margin, Math.min(width - margin, selectedOption.x));
             
@@ -1687,6 +2199,7 @@
 
         function handleMistake(wrongOption) {
             playWrongNote();
+            createClickEffect(wrongOption, false);
             const now = Date.now();
             
             // 记录单词错误次数
@@ -2017,6 +2530,7 @@
 
             // 在最后一个节点旁记录单词标签
             const lastNode = gameState.nodes[gameState.nodes.length - 1];
+            createWordCompleteEffect(lastNode);
             gameState.wordLabels.push({
                 x: lastNode.x,
                 y: lastNode.y,
@@ -2117,6 +2631,7 @@
                     alert('恭喜！你已完成所有单词！');
                     document.getElementById('menuLayer').classList.remove('hidden');
                     document.getElementById('uiLayer').classList.add('hidden');
+                    showMenuMainView();
                 }
             }, 3000);
         }
@@ -2173,6 +2688,7 @@
         // 初始化加载词库
         loadDictionaries();
         loadDailyStats();
+        loadGameSettings();
     </script>
 </body>
 </html>
