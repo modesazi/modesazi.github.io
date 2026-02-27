@@ -394,6 +394,7 @@
                     <select id="dictSelect" style="margin-bottom: 0; flex-grow: 1;"></select>
                 </div>
                 <button id="startBtn" style="width: 100%;">开始游戏</button>
+                <button id="historyStatsBtn" style="width: 100%; background: #333; border: 1px solid #555;" onclick="showHistoryStats()">📅 历史统计</button>
                 <button id="openSettingsBtn" style="width: 100%; background: #333; border: 1px solid #555;">设置</button>
             </div>
 
@@ -453,6 +454,22 @@
         <div id="progressGauge"></div>
         <button id="exitBtn" style="position: absolute; bottom: 20px; left: 20px; pointer-events: auto; background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.3); color: #aaa; padding: 8px 14px; font-size: 14px; border-radius: 20px; cursor: pointer; font-family: inherit;" onclick="confirmExit()">↩ 退出</button>
         <button id="statsBtn" style="position: absolute; bottom: 20px; right: 20px; pointer-events: auto; background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.3); color: #aaa; padding: 8px 14px; font-size: 14px; border-radius: 20px; cursor: pointer; font-family: inherit;" onclick="showDailyStats()">📊 今日统计</button>
+    </div>
+
+    <!-- 历史统计浮层 -->
+    <div id="historyStatsOverlay" class="overlay hidden" style="z-index: 25;">
+        <div class="overlay-content" style="width: min(92vw, 480px); max-height: 80vh; display: flex; flex-direction: column;">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;border-bottom:1px solid #333;padding-bottom:12px;flex-shrink:0;">
+                <h2 style="color:#4CAF50;margin:0;font-size:20px;">📅 历史统计</h2>
+                <div style="display:flex;gap:8px;flex-shrink:0;">
+                    <span style="font-size:12px;color:#4CAF50;">📝单词</span>
+                    <span style="font-size:12px;color:#ff9800;">✗错误</span>
+                    <span style="font-size:12px;color:#f44336;">☠死亡</span>
+                </div>
+            </div>
+            <div id="historyList" style="overflow-y:auto;flex-grow:1;min-height:0;"></div>
+            <button class="overlay-btn" style="width:100%;margin-top:16px;flex-shrink:0;" onclick="hideHistoryStats()">关闭</button>
+        </div>
     </div>
 
     <!-- 每日统计浮层 -->
@@ -1361,6 +1378,50 @@
         function saveDailyStats() {
             dailyStats.date = new Date().toDateString();
             localStorage.setItem('wordVineDailyStats', JSON.stringify(dailyStats));
+            // 同时写入历史记录
+            const history = loadHistoryData();
+            history[dailyStats.date] = {
+                wordsCompleted: dailyStats.wordsCompleted,
+                mistakes: dailyStats.mistakes,
+                deaths: dailyStats.deaths
+            };
+            localStorage.setItem('wordVineHistory', JSON.stringify(history));
+        }
+
+        function loadHistoryData() {
+            try {
+                const h = localStorage.getItem('wordVineHistory');
+                return h ? JSON.parse(h) : {};
+            } catch(e) { return {}; }
+        }
+
+        function showHistoryStats() {
+            const history = loadHistoryData();
+            const dates = Object.keys(history).sort((a, b) => new Date(b) - new Date(a));
+            const container = document.getElementById('historyList');
+            container.innerHTML = '';
+            if (dates.length === 0) {
+                container.innerHTML = '<div style="text-align:center;color:#555;padding:30px 0;">暂无历史记录</div>';
+            } else {
+                dates.forEach(date => {
+                    const d = history[date];
+                    const row = document.createElement('div');
+                    row.style.cssText = 'display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid #2a2a2a;padding:10px 0;gap:8px;';
+                    const isToday = date === new Date().toDateString();
+                    row.innerHTML = `
+                        <span style="font-size:13px;color:${isToday ? '#4CAF50' : '#aaa'};min-width:130px;flex-shrink:0;">${isToday ? '今天' : date}</span>
+                        <span style="font-size:13px;color:#4CAF50;white-space:nowrap;">📝 ${d.wordsCompleted}</span>
+                        <span style="font-size:13px;color:#ff9800;white-space:nowrap;">✗ ${d.mistakes}</span>
+                        <span style="font-size:13px;color:#f44336;white-space:nowrap;">☠ ${d.deaths}</span>
+                    `;
+                    container.appendChild(row);
+                });
+            }
+            document.getElementById('historyStatsOverlay').classList.remove('hidden');
+        }
+
+        function hideHistoryStats() {
+            document.getElementById('historyStatsOverlay').classList.add('hidden');
         }
 
         function showDailyStats() {
@@ -2180,6 +2241,9 @@
         }
 
         window.addEventListener('keydown', (e) => {
+            const tag = e.target.tagName;
+            if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || e.target.isContentEditable) return;
+            
             // 处理快速记忆询问界面的键盘事件
             if (gameState.isPromptingMemo) {
                 if (e.key.toUpperCase() === 'Y') {
