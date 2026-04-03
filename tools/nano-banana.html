@@ -610,14 +610,21 @@
                         <label for="aspectRatio">宽高比</label>
                         <select id="aspectRatio">
                             <option value="1:1">1:1</option>
+                            <option value="5:4">5:4</option>
                             <option value="4:5">4:5</option>
+                            <option value="4:3">4:3</option>
                             <option value="3:4">3:4</option>
+                            <option value="3:2">3:2</option>
                             <option value="16:9">16:9</option>
                             <option value="9:16">9:16</option>
                             <option value="21:9">21:9</option>
                             <option value="4:1">4:1</option>
+                            <option value="8:1">8:1</option>
                             <option value="1:4">1:4</option>
+                            <option value="custom">自定义</option>
                         </select>
+                        <input id="customAspectRatio" type="text" class="hidden-input" inputmode="text" autocomplete="off" spellcheck="false" placeholder="例如 16:10 或 7:3">
+                        <div id="aspectRatioHint" class="hint">支持常见横屏比例；选择“自定义”后可手动输入 x:y。</div>
                     </div>
                     <div class="field">
                         <label for="imageSize">分辨率</label>
@@ -712,6 +719,8 @@
         const apiKeyInput = document.getElementById('apiKey');
         const modelSelect = document.getElementById('model');
         const aspectRatioSelect = document.getElementById('aspectRatio');
+        const customAspectRatioInput = document.getElementById('customAspectRatio');
+        const aspectRatioHint = document.getElementById('aspectRatioHint');
         const imageSizeSelect = document.getElementById('imageSize');
         const promptInput = document.getElementById('prompt');
         const imageInput = document.getElementById('imageInput');
@@ -744,6 +753,45 @@
 
         function setLatency(message) {
             latencyText.textContent = message;
+        }
+
+        function normalizeAspectRatio(value) {
+            if (typeof value !== 'string') {
+                return '';
+            }
+
+            const normalized = value.trim().replace(/[：/xX]/g, ':').replace(/\s+/g, '');
+            const match = normalized.match(/^(\d+(?:\.\d+)?):(\d+(?:\.\d+)?)$/);
+            if (!match) {
+                return '';
+            }
+
+            const width = Number(match[1]);
+            const height = Number(match[2]);
+            if (!Number.isFinite(width) || !Number.isFinite(height) || width <= 0 || height <= 0) {
+                return '';
+            }
+
+            return `${match[1]}:${match[2]}`;
+        }
+
+        function getSelectedAspectRatio() {
+            if (aspectRatioSelect.value !== 'custom') {
+                return aspectRatioSelect.value;
+            }
+
+            return normalizeAspectRatio(customAspectRatioInput.value);
+        }
+
+        function updateAspectRatioUi() {
+            const isCustom = aspectRatioSelect.value === 'custom';
+            customAspectRatioInput.classList.toggle('hidden-input', !isCustom);
+
+            if (isCustom) {
+                aspectRatioHint.textContent = '输入格式为 x:y，例如 16:10、2:1、7:3。模型若不支持该比例，接口会直接返回错误。';
+            } else {
+                aspectRatioHint.textContent = '支持常见横屏比例；选择“自定义”后可手动输入 x:y。';
+            }
         }
 
         function setGenerateButtonLoading(isLoading) {
@@ -951,7 +999,7 @@
         }
 
         function updateAspectRatioOptions() {
-            const extendedOnly = new Set(['1:4', '4:1']);
+            const extendedOnly = new Set(['1:4', '4:1', '8:1']);
             const supportsExtended = modelSelect.value === 'google/gemini-3.1-flash-image-preview';
             Array.from(aspectRatioSelect.options).forEach((option) => {
                 if (extendedOnly.has(option.value)) {
@@ -963,6 +1011,8 @@
             if (!supportsExtended && extendedOnly.has(aspectRatioSelect.value)) {
                 aspectRatioSelect.value = '1:1';
             }
+
+            updateAspectRatioUi();
         }
 
         function resetOutput() {
@@ -982,6 +1032,7 @@
             promptInput.value = '';
             modelSelect.value = 'google/gemini-2.5-flash-image';
             aspectRatioSelect.value = '1:1';
+            customAspectRatioInput.value = '';
             imageSizeSelect.value = '1K';
             clearImages();
             updateAspectRatioOptions();
@@ -1064,6 +1115,15 @@
                 return;
             }
 
+            const resolvedAspectRatio = getSelectedAspectRatio();
+            if (!resolvedAspectRatio) {
+                setStatus('请输入合法的宽高比，例如 16:10');
+                aspectRatioSelect.value = 'custom';
+                updateAspectRatioUi();
+                customAspectRatioInput.focus();
+                return;
+            }
+
             setGenerateButtonLoading(true);
             resetOutput();
             showLoadingStage('正在发送请求', '图片与提示词已经准备好，正在连接 OpenRouter。');
@@ -1092,7 +1152,7 @@
                         }
                     ],
                     image_config: {
-                        aspect_ratio: aspectRatioSelect.value,
+                        aspect_ratio: resolvedAspectRatio,
                         image_size: imageSizeSelect.value
                     }
                 };
@@ -1166,6 +1226,7 @@
             updateAspectRatioOptions();
             updateImageSizeOptions();
         });
+        aspectRatioSelect.addEventListener('change', updateAspectRatioUi);
 
         ['dragenter', 'dragover'].forEach((eventName) => {
             dropzone.addEventListener(eventName, (event) => {
@@ -1187,6 +1248,7 @@
 
         updateAspectRatioOptions();
         updateImageSizeOptions();
+        updateAspectRatioUi();
         resetOutput();
     </script>
 </body>
