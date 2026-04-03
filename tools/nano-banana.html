@@ -300,6 +300,18 @@
             font-size: 0.82rem;
         }
 
+        .status-actions {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            flex-wrap: wrap;
+            justify-content: flex-end;
+        }
+
+        .status-actions .ghost {
+            padding: 10px 14px;
+        }
+
         .workspace {
             display: grid;
             grid-template-columns: minmax(0, 1.2fr) minmax(320px, 0.8fr);
@@ -499,6 +511,105 @@
             margin-bottom: 18px;
         }
 
+        .history-card {
+            display: grid;
+            gap: 16px;
+        }
+
+        .history-card.hidden {
+            display: none;
+        }
+
+        .history-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+            flex-wrap: wrap;
+        }
+
+        .history-actions {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+
+        .history-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+            gap: 14px;
+        }
+
+        .history-empty {
+            border-radius: 18px;
+            background: #faf0e4;
+            border: 1px dashed rgba(31, 27, 24, 0.12);
+            padding: 20px;
+            color: var(--muted);
+            text-align: center;
+            line-height: 1.7;
+        }
+
+        .history-item {
+            border-radius: 18px;
+            background: #fffaf2;
+            border: 1px solid rgba(31, 27, 24, 0.08);
+            overflow: hidden;
+            display: grid;
+        }
+
+        .history-preview {
+            aspect-ratio: 1 / 1;
+            background: #efe3d1;
+        }
+
+        .history-preview img {
+            display: block;
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+
+        .history-body {
+            padding: 14px;
+            display: grid;
+            gap: 10px;
+        }
+
+        .history-meta {
+            display: grid;
+            gap: 6px;
+            color: var(--muted);
+            font-size: 0.74rem;
+            line-height: 1.5;
+            font-family: 'IBM Plex Mono', monospace;
+        }
+
+        .history-prompt {
+            color: var(--ink);
+            font-size: 0.88rem;
+            line-height: 1.55;
+            display: -webkit-box;
+            line-clamp: 3;
+            -webkit-line-clamp: 3;
+            -webkit-box-orient: vertical;
+            overflow: hidden;
+            min-height: 4.1em;
+        }
+
+        .history-item-actions {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+        }
+
+        .history-item-actions .ghost,
+        .history-actions .ghost,
+        .history-item-actions .button {
+            padding: 10px 12px;
+            font-size: 0.86rem;
+        }
+
         .meta-box {
             padding: 14px 16px;
             border-radius: 16px;
@@ -573,6 +684,10 @@
 
             .grid-two,
             .thumbs {
+                grid-template-columns: 1fr;
+            }
+
+            .history-grid {
                 grid-template-columns: 1fr;
             }
 
@@ -679,7 +794,10 @@
                     <strong>请求状态</strong>
                     <div id="statusText" class="status">等待输入</div>
                 </div>
-                <div id="latencyText" class="status">尚未请求</div>
+                <div class="status-actions">
+                    <div id="latencyText" class="status">尚未请求</div>
+                    <button id="toggleHistoryButton" class="ghost" type="button">查看历史</button>
+                </div>
             </section>
 
             <section class="workspace">
@@ -718,6 +836,19 @@
 }</pre>
                 </div>
             </section>
+
+            <section id="historyCard" class="card history-card hidden">
+                <div class="history-header">
+                    <div>
+                        <h3>历史记录</h3>
+                        <div id="historySummary" class="status">本地还没有保存的生成记录</div>
+                    </div>
+                    <div class="history-actions">
+                        <button id="clearHistoryButton" class="ghost" type="button">批量清空</button>
+                    </div>
+                </div>
+                <div id="historyGrid" class="history-grid"></div>
+            </section>
         </main>
     </div>
 
@@ -745,6 +876,11 @@
         const resultActions = document.getElementById('resultActions');
         const downloadLink = document.getElementById('downloadLink');
         const openLink = document.getElementById('openLink');
+        const toggleHistoryButton = document.getElementById('toggleHistoryButton');
+        const historyCard = document.getElementById('historyCard');
+        const historySummary = document.getElementById('historySummary');
+        const historyGrid = document.getElementById('historyGrid');
+        const clearHistoryButton = document.getElementById('clearHistoryButton');
         const responseModel = document.getElementById('responseModel');
         const responseText = document.getElementById('responseText');
         const usageText = document.getElementById('usageText');
@@ -755,7 +891,11 @@
         const IMAGE_EXPORT_QUALITY = 0.86;
         const REQUEST_TIMEOUT_MS = 180000;
         const API_KEY_STORAGE_KEY = 'nano-banana.openrouter.apiKey';
+        const HISTORY_STORAGE_KEY = 'nano-banana.history';
+        const MAX_HISTORY_ITEMS = 24;
         let currentResultObjectUrl = '';
+        let historyVisible = false;
+        let historyItems = [];
 
         function setStatus(message) {
             statusText.textContent = message;
@@ -767,6 +907,176 @@
 
         function updateApiKeyHint(message) {
             apiKeyHint.textContent = message;
+        }
+
+        function formatDateTime(value) {
+            try {
+                return new Date(value).toLocaleString('zh-CN', {
+                    month: '2-digit',
+                    day: '2-digit',
+                    hour: '2-digit',
+                    minute: '2-digit'
+                });
+            } catch (error) {
+                return value;
+            }
+        }
+
+        function loadHistoryFromLocal() {
+            try {
+                const raw = localStorage.getItem(HISTORY_STORAGE_KEY);
+                if (!raw) {
+                    historyItems = [];
+                    return;
+                }
+
+                const parsed = JSON.parse(raw);
+                historyItems = Array.isArray(parsed) ? parsed : [];
+            } catch (error) {
+                historyItems = [];
+            }
+        }
+
+        function persistHistory() {
+            try {
+                localStorage.setItem(HISTORY_STORAGE_KEY, JSON.stringify(historyItems));
+                return true;
+            } catch (error) {
+                setStatus('历史记录保存失败，可能是本地存储空间不足');
+                return false;
+            }
+        }
+
+        function setHistoryVisible(visible) {
+            historyVisible = visible;
+            historyCard.classList.toggle('hidden', !visible);
+            toggleHistoryButton.textContent = visible ? '收起历史' : '查看历史';
+        }
+
+        function renderHistory() {
+            historySummary.textContent = historyItems.length
+                ? `本地已保存 ${historyItems.length} 条生成记录`
+                : '本地还没有保存的生成记录';
+            clearHistoryButton.disabled = historyItems.length === 0;
+            historyGrid.innerHTML = '';
+
+            if (!historyItems.length) {
+                const empty = document.createElement('div');
+                empty.className = 'history-empty';
+                empty.textContent = '每次成功生成后会自动保存到当前浏览器，可点击卡片重新查看。';
+                historyGrid.appendChild(empty);
+                return;
+            }
+
+            historyItems.forEach((item) => {
+                const card = document.createElement('article');
+                card.className = 'history-item';
+
+                const preview = document.createElement('div');
+                preview.className = 'history-preview';
+
+                const image = document.createElement('img');
+                image.src = item.imageUrl;
+                image.alt = item.prompt || 'history image';
+                preview.appendChild(image);
+
+                const body = document.createElement('div');
+                body.className = 'history-body';
+
+                const prompt = document.createElement('div');
+                prompt.className = 'history-prompt';
+                prompt.textContent = item.prompt || '无 prompt';
+
+                const meta = document.createElement('div');
+                meta.className = 'history-meta';
+                meta.innerHTML = `
+                    <div>${formatDateTime(item.createdAt)}</div>
+                    <div>${item.model || '-'}</div>
+                    <div>${item.aspectRatio || '-'} | ${item.imageSize || '-'}</div>
+                `;
+
+                const actions = document.createElement('div');
+                actions.className = 'history-item-actions';
+
+                const viewButton = document.createElement('button');
+                viewButton.type = 'button';
+                viewButton.className = 'button';
+                viewButton.textContent = '查看';
+                viewButton.addEventListener('click', async () => {
+                    await renderHistoryItem(item);
+                    setHistoryVisible(false);
+                    setStatus('已从历史记录载入结果');
+                });
+
+                const deleteButton = document.createElement('button');
+                deleteButton.type = 'button';
+                deleteButton.className = 'ghost';
+                deleteButton.textContent = '删除';
+                deleteButton.addEventListener('click', () => {
+                    deleteHistoryItem(item.id);
+                });
+
+                actions.appendChild(viewButton);
+                actions.appendChild(deleteButton);
+                body.appendChild(prompt);
+                body.appendChild(meta);
+                body.appendChild(actions);
+                card.appendChild(preview);
+                card.appendChild(body);
+                historyGrid.appendChild(card);
+            });
+        }
+
+        async function renderHistoryItem(item) {
+            const payload = item.payload || {
+                model: item.model,
+                usage: item.usage,
+                created_at: item.createdAt,
+                source: 'history'
+            };
+            const message = {
+                content: item.responseText || '',
+                images: [
+                    {
+                        image_url: {
+                            url: item.imageUrl
+                        }
+                    }
+                ]
+            };
+            await renderResult(message, payload);
+            responseModel.textContent = item.model || '-';
+            responseText.textContent = item.responseText || '无文本说明';
+            usageText.textContent = item.usageText || formatUsage(item.usage);
+            rawOutput.textContent = JSON.stringify(payload, null, 2);
+        }
+
+        function addHistoryItem(entry) {
+            historyItems.unshift(entry);
+            if (historyItems.length > MAX_HISTORY_ITEMS) {
+                historyItems = historyItems.slice(0, MAX_HISTORY_ITEMS);
+            }
+            if (persistHistory()) {
+                renderHistory();
+            }
+        }
+
+        function deleteHistoryItem(id) {
+            historyItems = historyItems.filter((item) => item.id !== id);
+            persistHistory();
+            renderHistory();
+            setStatus('历史记录已删除');
+        }
+
+        function clearHistory() {
+            historyItems = [];
+            try {
+                localStorage.removeItem(HISTORY_STORAGE_KEY);
+            } catch (error) {
+                setStatus('批量清空失败');
+            }
+            renderHistory();
+            setStatus('历史记录已清空');
         }
 
         function loadSavedApiKey() {
@@ -1248,6 +1558,29 @@
 
                 showLoadingStage('正在渲染结果', '图片已经返回，正在转换并显示到页面。');
                 await renderResult(message, payload);
+                const images = Array.isArray(message.images) ? message.images : [];
+                const imageUrl = images[0] && images[0].image_url ? images[0].image_url.url : '';
+                if (imageUrl) {
+                    addHistoryItem({
+                        id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+                        createdAt: new Date().toISOString(),
+                        imageUrl,
+                        prompt,
+                        model: payload.model || modelSelect.value,
+                        aspectRatio: resolvedAspectRatio,
+                        imageSize: imageSizeSelect.value,
+                        responseText: message.content || '',
+                        usage: payload.usage || null,
+                        usageText: formatUsage(payload.usage),
+                        payload: {
+                            id: payload.id,
+                            model: payload.model || modelSelect.value,
+                            usage: payload.usage || null,
+                            created: payload.created || null,
+                            object: payload.object || 'chat.completion'
+                        }
+                    });
+                }
                 const elapsed = ((performance.now() - startTime) / 1000).toFixed(2);
                 setLatency(`耗时 ${elapsed}s`);
                 setStatus('请求完成');
@@ -1277,6 +1610,10 @@
         generateButton.addEventListener('click', handleGenerate);
         saveApiKeyButton.addEventListener('click', saveApiKeyToLocal);
         clearApiKeyButton.addEventListener('click', clearSavedApiKey);
+        toggleHistoryButton.addEventListener('click', () => {
+            setHistoryVisible(!historyVisible);
+        });
+        clearHistoryButton.addEventListener('click', clearHistory);
         imageInput.addEventListener('change', async (event) => {
             await ingestFiles(event.target.files);
         });
@@ -1308,6 +1645,8 @@
         updateImageSizeOptions();
         updateAspectRatioUi();
         loadSavedApiKey();
+        loadHistoryFromLocal();
+        renderHistory();
         resetOutput();
     </script>
 </body>
