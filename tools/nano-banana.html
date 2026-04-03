@@ -97,6 +97,7 @@
         .field {
             display: grid;
             gap: 8px;
+            align-content: start;
         }
 
         .field label {
@@ -135,6 +136,7 @@
             display: grid;
             grid-template-columns: repeat(2, minmax(0, 1fr));
             gap: 14px;
+            align-items: start;
         }
 
         .hint,
@@ -588,12 +590,16 @@
             <p class="lead">连接 OpenRouter 的 Nano Banana 图像模型，输入临时 API Key、上传参考图、填写提示词，然后直接在浏览器里拿到返回结果。</p>
 
             <div class="stack">
-                <div class="notice">API Key 仅用于当前页面请求，不会写入 localStorage、sessionStorage、cookie，也不会自动持久化。</div>
+                <div class="notice">API Key 默认仅用于当前页面请求，不会自动写入本地。你可以手动点击“保存到本地”后再持久化到当前浏览器。</div>
 
                 <div class="field">
                     <label for="apiKey">OpenRouter API Key</label>
                     <input id="apiKey" type="password" autocomplete="off" spellcheck="false" placeholder="sk-or-v1-...">
-                    <div class="hint">页面刷新后需要重新输入。</div>
+                    <div class="dropzone-actions">
+                        <button id="saveApiKeyButton" class="ghost" type="button">保存到本地</button>
+                        <button id="clearApiKeyButton" class="ghost" type="button">清空本地缓存</button>
+                    </div>
+                    <div id="apiKeyHint" class="hint">默认不自动保存；如果未手动保存，页面刷新后需要重新输入。</div>
                 </div>
 
                 <div class="field">
@@ -717,6 +723,9 @@
 
     <script>
         const apiKeyInput = document.getElementById('apiKey');
+        const saveApiKeyButton = document.getElementById('saveApiKeyButton');
+        const clearApiKeyButton = document.getElementById('clearApiKeyButton');
+        const apiKeyHint = document.getElementById('apiKeyHint');
         const modelSelect = document.getElementById('model');
         const aspectRatioSelect = document.getElementById('aspectRatio');
         const customAspectRatioInput = document.getElementById('customAspectRatio');
@@ -745,6 +754,7 @@
         const MAX_IMAGE_DIMENSION = 1600;
         const IMAGE_EXPORT_QUALITY = 0.86;
         const REQUEST_TIMEOUT_MS = 180000;
+        const API_KEY_STORAGE_KEY = 'nano-banana.openrouter.apiKey';
         let currentResultObjectUrl = '';
 
         function setStatus(message) {
@@ -753,6 +763,52 @@
 
         function setLatency(message) {
             latencyText.textContent = message;
+        }
+
+        function updateApiKeyHint(message) {
+            apiKeyHint.textContent = message;
+        }
+
+        function loadSavedApiKey() {
+            try {
+                const savedApiKey = localStorage.getItem(API_KEY_STORAGE_KEY);
+                if (savedApiKey) {
+                    apiKeyInput.value = savedApiKey;
+                    updateApiKeyHint('已从本地加载 API Key。只有你手动点击“保存到本地”时才会写入。');
+                }
+            } catch (error) {
+                updateApiKeyHint('当前浏览器不允许访问本地存储，API Key 只能临时输入。');
+            }
+        }
+
+        function saveApiKeyToLocal() {
+            const apiKey = apiKeyInput.value.trim();
+            if (!apiKey) {
+                setStatus('请先输入 API Key，再执行保存');
+                apiKeyInput.focus();
+                return;
+            }
+
+            try {
+                localStorage.setItem(API_KEY_STORAGE_KEY, apiKey);
+                updateApiKeyHint('API Key 已保存到当前浏览器本地。之后打开页面会自动填充。');
+                setStatus('API Key 已保存到本地');
+            } catch (error) {
+                updateApiKeyHint('保存失败：当前浏览器不允许访问本地存储。');
+                setStatus('API Key 保存失败');
+            }
+        }
+
+        function clearSavedApiKey() {
+            try {
+                localStorage.removeItem(API_KEY_STORAGE_KEY);
+                apiKeyInput.value = '';
+                updateApiKeyHint('本地缓存已清空。页面现在只保留临时输入模式。');
+                setStatus('本地缓存已清空');
+            } catch (error) {
+                updateApiKeyHint('清空失败：当前浏览器不允许访问本地存储。');
+                setStatus('清空本地缓存失败');
+            }
         }
 
         function normalizeAspectRatio(value) {
@@ -1219,6 +1275,8 @@
         clearImagesButton.addEventListener('click', clearImages);
         resetButton.addEventListener('click', resetForm);
         generateButton.addEventListener('click', handleGenerate);
+        saveApiKeyButton.addEventListener('click', saveApiKeyToLocal);
+        clearApiKeyButton.addEventListener('click', clearSavedApiKey);
         imageInput.addEventListener('change', async (event) => {
             await ingestFiles(event.target.files);
         });
@@ -1249,6 +1307,7 @@
         updateAspectRatioOptions();
         updateImageSizeOptions();
         updateAspectRatioUi();
+        loadSavedApiKey();
         resetOutput();
     </script>
 </body>
