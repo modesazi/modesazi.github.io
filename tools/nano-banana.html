@@ -503,6 +503,17 @@
             display: flex;
             flex-wrap: wrap;
             gap: 10px;
+            align-items: flex-start;
+        }
+
+        .result-actions .button,
+        .result-actions .ghost {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            text-decoration: none;
+            min-height: 48px;
+            align-self: flex-start;
         }
 
         .meta-grid {
@@ -765,8 +776,8 @@
 
                 <div class="field">
                     <label>输入图片</label>
-                    <div id="dropzone" class="dropzone">
-                        <div>支持拖拽或手动选择，可用于图像编辑、风格迁移、参考构图。</div>
+                    <div id="dropzone" class="dropzone" tabindex="0">
+                        <div>支持拖拽、手动选择或直接粘贴截图，可用于图像编辑、风格迁移、参考构图。</div>
                         <div class="dropzone-actions">
                             <button id="pickImages" class="ghost" type="button">选择图片</button>
                             <button id="clearImages" class="ghost" type="button">清空图片</button>
@@ -1320,6 +1331,25 @@
             renderThumbs();
         }
 
+        function getClipboardImageFiles(clipboardData) {
+            if (!clipboardData || !clipboardData.items) {
+                return [];
+            }
+
+            return Array.from(clipboardData.items)
+                .filter((item) => item.kind === 'file' && item.type.startsWith('image/'))
+                .map((item) => item.getAsFile())
+                .filter(Boolean);
+        }
+
+        function isEditableTarget(target) {
+            if (!(target instanceof HTMLElement)) {
+                return false;
+            }
+
+            return target.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName);
+        }
+
         async function ingestFiles(fileList) {
             const files = Array.from(fileList).filter((file) => file.type.startsWith('image/'));
             if (!files.length) {
@@ -1616,6 +1646,35 @@
         clearHistoryButton.addEventListener('click', clearHistory);
         imageInput.addEventListener('change', async (event) => {
             await ingestFiles(event.target.files);
+        });
+        dropzone.addEventListener('click', (event) => {
+            if (event.target === dropzone) {
+                dropzone.focus();
+            }
+        });
+        dropzone.addEventListener('paste', async (event) => {
+            const files = getClipboardImageFiles(event.clipboardData);
+            if (!files.length) {
+                return;
+            }
+
+            event.preventDefault();
+            await ingestFiles(files);
+            dropzone.focus();
+        });
+        document.addEventListener('paste', async (event) => {
+            if (isEditableTarget(event.target) || dropzone.contains(event.target)) {
+                return;
+            }
+
+            const files = getClipboardImageFiles(event.clipboardData);
+            if (!files.length) {
+                return;
+            }
+
+            event.preventDefault();
+            await ingestFiles(files);
+            dropzone.focus();
         });
         modelSelect.addEventListener('change', () => {
             updateAspectRatioOptions();
