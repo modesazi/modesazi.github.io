@@ -667,6 +667,64 @@
             font-size: 0.9rem;
         }
 
+        .confirm-overlay {
+            position: fixed;
+            inset: 0;
+            display: grid;
+            place-items: center;
+            padding: 24px;
+            background: rgba(31, 27, 24, 0.24);
+            backdrop-filter: blur(10px);
+            z-index: 40;
+        }
+
+        .confirm-overlay.hidden {
+            display: none;
+        }
+
+        .confirm-dialog {
+            width: min(460px, 100%);
+            padding: 24px;
+            display: grid;
+            gap: 14px;
+            background: linear-gradient(135deg, rgba(255, 251, 245, 0.96), rgba(255, 241, 226, 0.94));
+            border: 1px solid rgba(255, 255, 255, 0.55);
+        }
+
+        .confirm-kicker {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: fit-content;
+            padding: 7px 11px;
+            border-radius: 999px;
+            background: rgba(255, 107, 44, 0.12);
+            color: var(--accent-deep);
+            font-size: 0.74rem;
+            font-weight: 700;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+        }
+
+        .confirm-dialog h3 {
+            margin: 0;
+            font-size: 1.25rem;
+        }
+
+        .confirm-dialog p {
+            margin: 0;
+            color: var(--muted);
+            line-height: 1.7;
+        }
+
+        .confirm-actions {
+            display: flex;
+            justify-content: flex-end;
+            gap: 10px;
+            flex-wrap: wrap;
+            margin-top: 4px;
+        }
+
         @media (max-width: 1120px) {
             .shell {
                 grid-template-columns: 1fr;
@@ -863,6 +921,18 @@
         </main>
     </div>
 
+    <div id="confirmOverlay" class="confirm-overlay hidden" aria-hidden="true">
+        <div class="panel confirm-dialog" role="dialog" aria-modal="true" aria-labelledby="confirmTitle" aria-describedby="confirmMessage">
+            <div class="confirm-kicker">操作确认</div>
+            <h3 id="confirmTitle">确认操作</h3>
+            <p id="confirmMessage">此操作不可撤销。</p>
+            <div class="confirm-actions">
+                <button id="confirmCancelButton" class="ghost" type="button">取消</button>
+                <button id="confirmAcceptButton" class="button" type="button">确认</button>
+            </div>
+        </div>
+    </div>
+
     <script>
         const apiKeyInput = document.getElementById('apiKey');
         const saveApiKeyButton = document.getElementById('saveApiKeyButton');
@@ -896,6 +966,11 @@
         const responseText = document.getElementById('responseText');
         const usageText = document.getElementById('usageText');
         const rawOutput = document.getElementById('rawOutput');
+        const confirmOverlay = document.getElementById('confirmOverlay');
+        const confirmTitle = document.getElementById('confirmTitle');
+        const confirmMessage = document.getElementById('confirmMessage');
+        const confirmCancelButton = document.getElementById('confirmCancelButton');
+        const confirmAcceptButton = document.getElementById('confirmAcceptButton');
 
         const imageFiles = [];
         const MAX_IMAGE_DIMENSION = 1600;
@@ -903,10 +978,16 @@
         const REQUEST_TIMEOUT_MS = 180000;
         const API_KEY_STORAGE_KEY = 'nano-banana.openrouter.apiKey';
         const HISTORY_STORAGE_KEY = 'nano-banana.history';
+        const HISTORY_DB_NAME = 'nano-banana.history.db';
+        const HISTORY_STORE_NAME = 'historyEntries';
+        const HISTORY_DB_VERSION = 1;
         const MAX_HISTORY_ITEMS = 24;
         let currentResultObjectUrl = '';
         let historyVisible = false;
         let historyItems = [];
+        let historyDbPromise = null;
+        let confirmResolver = null;
+        let confirmLastFocusedElement = null;
 
         function setStatus(message) {
             statusText.textContent = message;
@@ -918,6 +999,38 @@
 
         function updateApiKeyHint(message) {
             apiKeyHint.textContent = message;
+        }
+
+        function closeConfirmDialog(accepted) {
+            confirmOverlay.classList.add('hidden');
+            confirmOverlay.setAttribute('aria-hidden', 'true');
+            const resolver = confirmResolver;
+            confirmResolver = null;
+            if (confirmLastFocusedElement instanceof HTMLElement) {
+                confirmLastFocusedElement.focus();
+            }
+            confirmLastFocusedElement = null;
+            if (resolver) {
+                resolver(accepted);
+            }
+        }
+
+        function openConfirmDialog(title, message, confirmLabel) {
+            if (confirmResolver) {
+                closeConfirmDialog(false);
+            }
+
+            confirmTitle.textContent = title;
+            confirmMessage.textContent = message;
+            confirmAcceptButton.textContent = confirmLabel || '确认';
+            confirmLastFocusedElement = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+            confirmOverlay.classList.remove('hidden');
+            confirmOverlay.setAttribute('aria-hidden', 'false');
+            confirmCancelButton.focus();
+
+            return new Promise((resolve) => {
+                confirmResolver = resolve;
+            });
         }
 
         function formatDateTime(value) {
@@ -933,28 +1046,117 @@
             }
         }
 
-        function loadHistoryFromLocal() {
+        function loadLegacyHistoryFromLocal() {
             try {
                 const raw = localStorage.getItem(HISTORY_STORAGE_KEY);
                 if (!raw) {
-                    historyItems = [];
-                    return;
+                    return [];
                 }
 
                 const parsed = JSON.parse(raw);
-                historyItems = Array.isArray(parsed) ? parsed : [];
+                return Array.isArray(parsed) ? parsed : [];
             } catch (error) {
-                historyItems = [];
+                return [];
             }
         }
 
-        function persistHistory() {
+        function clearLegacyHistoryFromLocal() {
             try {
-                localStorage.setItem(HISTORY_STORAGE_KEY, JSON.stringify(historyItems));
-                return true;
+                localStorage.removeItem(HISTORY_STORAGE_KEY);
             } catch (error) {
-                setStatus('历史记录保存失败，可能是本地存储空间不足');
-                return false;
+            }
+        }
+
+        function openHistoryDatabase() {
+            if (!('indexedDB' in window)) {
+                return Promise.reject(new Error('当前浏览器不支持 IndexedDB'));
+            }
+
+            if (!historyDbPromise) {
+                historyDbPromise = new Promise((resolve, reject) => {
+                    const request = window.indexedDB.open(HISTORY_DB_NAME, HISTORY_DB_VERSION);
+
+                    request.onupgradeneeded = () => {
+                        const db = request.result;
+                        if (!db.objectStoreNames.contains(HISTORY_STORE_NAME)) {
+                            db.createObjectStore(HISTORY_STORE_NAME, { keyPath: 'id' });
+                        }
+                    };
+
+                    request.onsuccess = () => resolve(request.result);
+                    request.onerror = () => reject(request.error || new Error('打开历史数据库失败'));
+                });
+            }
+
+            return historyDbPromise;
+        }
+
+        async function getHistoryStore(mode) {
+            const db = await openHistoryDatabase();
+            const transaction = db.transaction(HISTORY_STORE_NAME, mode);
+            return transaction.objectStore(HISTORY_STORE_NAME);
+        }
+
+        async function getAllHistoryEntries() {
+            const store = await getHistoryStore('readonly');
+            return await new Promise((resolve, reject) => {
+                const request = store.getAll();
+                request.onsuccess = () => {
+                    const entries = Array.isArray(request.result) ? request.result : [];
+                    entries.sort((left, right) => String(right.createdAt || '').localeCompare(String(left.createdAt || '')));
+                    resolve(entries);
+                };
+                request.onerror = () => reject(request.error || new Error('读取历史记录失败'));
+            });
+        }
+
+        async function trimHistoryEntries() {
+            const entries = await getAllHistoryEntries();
+            if (entries.length <= MAX_HISTORY_ITEMS) {
+                return entries;
+            }
+
+            const removableEntries = entries.slice(MAX_HISTORY_ITEMS);
+            const store = await getHistoryStore('readwrite');
+            await Promise.all(removableEntries.map((entry) => new Promise((resolve, reject) => {
+                const request = store.delete(entry.id);
+                request.onsuccess = () => resolve();
+                request.onerror = () => reject(request.error || new Error('清理历史记录失败'));
+            })));
+            return entries.slice(0, MAX_HISTORY_ITEMS);
+        }
+
+        async function migrateLegacyHistoryIfNeeded() {
+            const legacyEntries = loadLegacyHistoryFromLocal();
+            if (!legacyEntries.length) {
+                return;
+            }
+
+            const existingEntries = await getAllHistoryEntries();
+            if (existingEntries.length) {
+                clearLegacyHistoryFromLocal();
+                return;
+            }
+
+            const store = await getHistoryStore('readwrite');
+            await Promise.all(legacyEntries.map((entry) => new Promise((resolve, reject) => {
+                const request = store.put(entry);
+                request.onsuccess = () => resolve();
+                request.onerror = () => reject(request.error || new Error('迁移历史记录失败'));
+            })));
+            clearLegacyHistoryFromLocal();
+            await trimHistoryEntries();
+        }
+
+        async function loadHistory() {
+            try {
+                await migrateLegacyHistoryIfNeeded();
+                historyItems = await trimHistoryEntries();
+            } catch (error) {
+                historyItems = loadLegacyHistoryFromLocal();
+                if (!historyItems.length) {
+                    setStatus('历史记录不可用，当前浏览器可能限制了本地数据库');
+                }
             }
         }
 
@@ -1023,8 +1225,12 @@
                 deleteButton.type = 'button';
                 deleteButton.className = 'ghost';
                 deleteButton.textContent = '删除';
-                deleteButton.addEventListener('click', () => {
-                    deleteHistoryItem(item.id);
+                deleteButton.addEventListener('click', async () => {
+                    const accepted = await openConfirmDialog('删除这条历史记录？', '删除后将无法恢复这条生成结果。', '确认删除');
+                    if (!accepted) {
+                        return;
+                    }
+                    await deleteHistoryItem(item.id);
                 });
 
                 actions.appendChild(viewButton);
@@ -1062,32 +1268,64 @@
             rawOutput.textContent = JSON.stringify(payload, null, 2);
         }
 
-        function addHistoryItem(entry) {
-            historyItems.unshift(entry);
-            if (historyItems.length > MAX_HISTORY_ITEMS) {
-                historyItems = historyItems.slice(0, MAX_HISTORY_ITEMS);
-            }
-            if (persistHistory()) {
-                renderHistory();
-            }
+        async function saveHistoryEntry(entry) {
+            const store = await getHistoryStore('readwrite');
+            await new Promise((resolve, reject) => {
+                const request = store.put(entry);
+                request.onsuccess = () => resolve();
+                request.onerror = () => reject(request.error || new Error('历史记录保存失败'));
+            });
         }
 
-        function deleteHistoryItem(id) {
-            historyItems = historyItems.filter((item) => item.id !== id);
-            persistHistory();
-            renderHistory();
-            setStatus('历史记录已删除');
-        }
-
-        function clearHistory() {
-            historyItems = [];
+        async function addHistoryItem(entry) {
             try {
-                localStorage.removeItem(HISTORY_STORAGE_KEY);
+                await saveHistoryEntry(entry);
+                historyItems = await trimHistoryEntries();
+                renderHistory();
+            } catch (error) {
+                setStatus('历史记录保存失败，当前浏览器可能限制了本地数据库');
+            }
+        }
+
+        async function removeHistoryEntry(id) {
+            const store = await getHistoryStore('readwrite');
+            await new Promise((resolve, reject) => {
+                const request = store.delete(id);
+                request.onsuccess = () => resolve();
+                request.onerror = () => reject(request.error || new Error('删除历史记录失败'));
+            });
+        }
+
+        async function deleteHistoryItem(id) {
+            try {
+                await removeHistoryEntry(id);
+                historyItems = historyItems.filter((item) => item.id !== id);
+                renderHistory();
+                setStatus('历史记录已删除');
+            } catch (error) {
+                setStatus('删除历史记录失败');
+            }
+        }
+
+        async function clearHistoryEntries() {
+            const store = await getHistoryStore('readwrite');
+            await new Promise((resolve, reject) => {
+                const request = store.clear();
+                request.onsuccess = () => resolve();
+                request.onerror = () => reject(request.error || new Error('清空历史记录失败'));
+            });
+        }
+
+        async function clearHistory() {
+            try {
+                await clearHistoryEntries();
+                clearLegacyHistoryFromLocal();
+                historyItems = [];
+                renderHistory();
+                setStatus('历史记录已清空');
             } catch (error) {
                 setStatus('批量清空失败');
             }
-            renderHistory();
-            setStatus('历史记录已清空');
         }
 
         function loadSavedApiKey() {
@@ -1591,7 +1829,7 @@
                 const images = Array.isArray(message.images) ? message.images : [];
                 const imageUrl = images[0] && images[0].image_url ? images[0].image_url.url : '';
                 if (imageUrl) {
-                    addHistoryItem({
+                    await addHistoryItem({
                         id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
                         createdAt: new Date().toISOString(),
                         imageUrl,
@@ -1640,10 +1878,33 @@
         generateButton.addEventListener('click', handleGenerate);
         saveApiKeyButton.addEventListener('click', saveApiKeyToLocal);
         clearApiKeyButton.addEventListener('click', clearSavedApiKey);
+        confirmCancelButton.addEventListener('click', () => {
+            closeConfirmDialog(false);
+        });
+        confirmAcceptButton.addEventListener('click', () => {
+            closeConfirmDialog(true);
+        });
+        confirmOverlay.addEventListener('click', (event) => {
+            if (event.target === confirmOverlay) {
+                closeConfirmDialog(false);
+            }
+        });
+        document.addEventListener('keydown', (event) => {
+            if (event.key === 'Escape' && !confirmOverlay.classList.contains('hidden')) {
+                event.preventDefault();
+                closeConfirmDialog(false);
+            }
+        });
         toggleHistoryButton.addEventListener('click', () => {
             setHistoryVisible(!historyVisible);
         });
-        clearHistoryButton.addEventListener('click', clearHistory);
+        clearHistoryButton.addEventListener('click', async () => {
+            const accepted = await openConfirmDialog('清空全部历史记录？', '清空后所有本地保存的生成结果都会被移除，且无法恢复。', '确认清空');
+            if (!accepted) {
+                return;
+            }
+            await clearHistory();
+        });
         imageInput.addEventListener('change', async (event) => {
             await ingestFiles(event.target.files);
         });
@@ -1700,13 +1961,17 @@
             await ingestFiles(event.dataTransfer.files);
         });
 
-        updateAspectRatioOptions();
-        updateImageSizeOptions();
-        updateAspectRatioUi();
-        loadSavedApiKey();
-        loadHistoryFromLocal();
-        renderHistory();
-        resetOutput();
+        async function initializeApp() {
+            updateAspectRatioOptions();
+            updateImageSizeOptions();
+            updateAspectRatioUi();
+            loadSavedApiKey();
+            await loadHistory();
+            renderHistory();
+            resetOutput();
+        }
+
+        initializeApp();
     </script>
 </body>
 </html>
