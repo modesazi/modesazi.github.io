@@ -297,6 +297,20 @@
         }
 
         const weatherCache = new Map()
+        const weatherFetchCooldownMs = 10000
+        let lastWeatherFetchStartedAt = 0
+
+        function shouldBlockWeatherFetch() {
+            const now = Date.now()
+            const elapsed = now - lastWeatherFetchStartedAt
+            if (lastWeatherFetchStartedAt && elapsed < weatherFetchCooldownMs) {
+                const remainingSeconds = Math.ceil((weatherFetchCooldownMs - elapsed) / 1000)
+                setStatus(`刚刚已请求天气数据，请 ${remainingSeconds} 秒后再试`)
+                return true
+            }
+            lastWeatherFetchStartedAt = now
+            return false
+        }
 
         function toLocalDatetimeValue(date) {
             const offset = date.getTimezoneOffset() * 60000
@@ -864,6 +878,9 @@
                     setStatus("无可刷新的数据")
                     return
                 }
+                if (shouldBlockWeatherFetch()) {
+                    return
+                }
                 generateBtn.disabled = true
                 setStatus("正在刷新天气数据...")
                 
@@ -938,6 +955,9 @@
                 setStatus("时间范围无效")
                 return
             }
+            if (shouldBlockWeatherFetch()) {
+                return
+            }
 
             generateBtn.disabled = true
             setStatus("正在生成采样点并获取天气数据...")
@@ -966,6 +986,7 @@
             const endDate = toLocalDateString(end)
 
             try {
+                weatherCache.clear()
                 const grouped = new Map()
                 for (const sample of samples) {
                     const roundedLat = roundCoord(sample.lat)
