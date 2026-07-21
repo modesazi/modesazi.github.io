@@ -468,12 +468,25 @@
             return Math.round(value * factor) / factor
         }
 
+        const HISTORICAL_DAYS_THRESHOLD = 90
+        const ARCHIVE_API_BASE = "https://archive-api.open-meteo.com/v1/archive"
+        const FORECAST_API_BASE = "https://api.open-meteo.com/v1/forecast"
+
+        function isHistoricalRange(endDateStr) {
+            const end = new Date(endDateStr + "T00:00:00")
+            const now = new Date()
+            const diffDays = (now.getTime() - end.getTime()) / 86400000
+            return diffDays > HISTORICAL_DAYS_THRESHOLD
+        }
+
         async function fetchWeather(lat, lon, startDate, endDate) {
             const key = `${lat.toFixed(3)},${lon.toFixed(3)}`
             if (weatherCache.has(key)) {
                 return weatherCache.get(key)
             }
-            const url = new URL("https://api.open-meteo.com/v1/forecast")
+            const useArchive = isHistoricalRange(endDate)
+            const apiBase = useArchive ? ARCHIVE_API_BASE : FORECAST_API_BASE
+            const url = new URL(apiBase)
             url.searchParams.set("latitude", lat)
             url.searchParams.set("longitude", lon)
             url.searchParams.set("hourly", "weathercode,temperature_2m,apparent_temperature,windspeed_10m,winddirection_10m")
