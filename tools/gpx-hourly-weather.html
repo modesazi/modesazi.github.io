@@ -71,6 +71,7 @@
             border-radius: 14px;
             padding: 20px;
             background: #ffffff;
+            min-width: 0;
         }
 
         .card h2 {
@@ -369,10 +370,12 @@
             padding: 10px 8px;
             border-bottom: 1px solid #e6e6e6;
             text-align: left;
+            white-space: nowrap;
         }
 
         th {
             background: #f5fbff;
+            font-weight: 600;
         }
 
         tbody tr {
@@ -458,6 +461,13 @@
                 <h2>3. 生成与导出</h2>
                 <button id="generateBtn" class="btn" disabled>生成逐小时气象采样</button>
                 <div style="margin-top: 12px;">
+                    <label style="display: flex; align-items: center; gap: 8px; cursor: pointer; margin-bottom: 4px;">
+                        <input type="checkbox" id="utmbMode" checked style="transform: translateY(1px); width: auto;">
+                        UTMB 模式 · 多模型共识
+                    </label>
+                    <div class="note">按距比赛时间自动选择 ECMWF IFS / ICON-CH1·CH2 / ICON-EU / AROME HD，展示各模型原始值与共识、分歧；远期自动降级为单模型趋势</div>
+                </div>
+                <div style="margin-top: 12px;">
                     <label>导出背景</label>
                     <div class="seg">
                         <button id="exportLightBtn" class="seg-item on" type="button">亮色</button>
@@ -479,6 +489,7 @@
                         <h3>风险摘要</h3>
                         <div id="riskWrap" style="margin-top: 10px;"></div>
                     </div>
+                    <div class="note" id="modelNote" style="display: none; margin-top: 8px;">多模型共识模式：各采样点按距比赛时间动态选择模型，表格与详情展示模型原始值与共识等级</div>
 
                     <div class="sec-block">
                         <div class="chart-head">
@@ -501,6 +512,10 @@
                                 <div class="dg"><div class="dg-k">风向</div><div class="dg-v" id="dWindDir"></div></div>
                                 <div class="dg"><div class="dg-k">沿线里程</div><div class="dg-v" id="dKm"></div></div>
                                 <div class="dg"><div class="dg-k">海拔</div><div class="dg-v" id="dEle"></div></div>
+                            </div>
+                            <div id="modelsBox" style="display: none; margin-top: 12px; border-top: 1px solid #e6e6e6; padding-top: 10px;">
+                                <div class="dg-k" style="margin-bottom: 6px;">模型明细与共识</div>
+                                <div id="modelsList" style="font-size: 0.85em; line-height: 1.8;"></div>
                             </div>
                         </div>
                     </div>
@@ -562,6 +577,10 @@
         const dWindDir = document.getElementById("dWindDir")
         const dKm = document.getElementById("dKm")
         const dEle = document.getElementById("dEle")
+        const modelsBox = document.getElementById("modelsBox")
+        const modelsList = document.getElementById("modelsList")
+        const modelNote = document.getElementById("modelNote")
+        const utmbModeInput = document.getElementById("utmbMode")
         const tableWrapper = document.getElementById("tableWrapper")
 
         let gpxData = null
@@ -578,6 +597,7 @@
         let selectedIndex = -1
         let resizeTimer = null
         let exportTheme = "light"
+        let utmbMode = true
 
         const MONO = "Menlo, Consolas, monospace"
         const SANS = '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif'
@@ -954,6 +974,144 @@
         const HISTORICAL_DAYS_THRESHOLD = 90
         const ARCHIVE_API_BASE = "https://archive-api.open-meteo.com/v1/archive"
         const FORECAST_API_BASE = "https://api.open-meteo.com/v1/forecast"
+        const METEOFRANCE_API_BASE = "https://api.open-meteo.com/v1/meteofrance"
+
+        const UTMB_HOURLY_VARS = "temperature_2m,apparent_temperature,precipitation,windspeed_10m,winddirection_10m,windgusts_10m,weathercode"
+
+        const UTMB_MODELS = {
+            ecmwf_ifs025: { id: "ecmwf_ifs025", name: "ECMWF IFS", endpoint: FORECAST_API_BASE, horizonH: 360 },
+            meteoswiss_icon_ch2: { id: "meteoswiss_icon_ch2", name: "ICON-CH2", endpoint: FORECAST_API_BASE, horizonH: 120 },
+            meteoswiss_icon_ch1: { id: "meteoswiss_icon_ch1", name: "ICON-CH1", endpoint: FORECAST_API_BASE, horizonH: 33 },
+            icon_eu: { id: "icon_eu", name: "ICON-EU", endpoint: FORECAST_API_BASE, horizonH: 120 },
+            arome_france_hd: { id: "arome_france_hd", name: "AROME HD", endpoint: METEOFRANCE_API_BASE, horizonH: 42 }
+        }
+
+        function selectUtmbModelIds(hoursToTarget) {
+            if (hoursToTarget > 120) {
+                return ["ecmwf_ifs025"]
+            }
+            if (hoursToTarget > 72) {
+                return ["ecmwf_ifs025", "meteoswiss_icon_ch2", "icon_eu"]
+            }
+            if (hoursToTarget > 48) {
+                return ["ecmwf_ifs025", "meteoswiss_icon_ch2", "icon_eu", "arome_france_hd"]
+            }
+            return ["arome_france_hd", "meteoswiss_icon_ch1", "meteoswiss_icon_ch2", "ecmwf_ifs025"]
+        }
+
+        function modelsForSample(timeMs) {
+            const hours = (timeMs - Date.now()) / 3600000
+            return selectUtmbModelIds(hours)
+                .map(id => UTMB_MODELS[id])
+                .filter(m => hours <= m.horizonH && hours >= -24)
+        }
+
+        function median(values) {
+            const nums = values.filter(v => v != null && Number.isFinite(v))
+            if (!nums.length) return null
+            const sorted = nums.slice().sort((a, b) => a - b)
+            const mid = Math.floor(sorted.length / 2)
+            return sorted.length % 2 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2
+        }
+
+        function mostFrequent(values) {
+            const counts = new Map()
+            let best = null
+            let bestCount = 0
+            for (const v of values) {
+                const c = (counts.get(v) || 0) + 1
+                counts.set(v, c)
+                if (c > bestCount) {
+                    bestCount = c
+                    best = v
+                }
+            }
+            return best
+        }
+
+        function utmbConsensusLevel(events, n) {
+            if (n <= 1) return "SINGLE"
+            if (!events.length) return "—"
+            let worst = 3
+            for (const e of events) {
+                const ratio = e.agree / n
+                worst = Math.min(worst, ratio >= 0.75 ? 3 : ratio >= 0.5 ? 2 : 1)
+            }
+            return worst === 3 ? "HIGH" : worst === 2 ? "MEDIUM" : "LOW"
+        }
+
+        function utmbRiskLabel(s, n) {
+            const tempMed = s.temperature
+            const rainRatio = n ? s.rainCount / n : 0
+            if (tempMed != null && tempMed < 5 && rainRatio >= 0.5 && s.gustMax >= 11.1) return "失温风险"
+            if (tempMed != null && tempMed < 3) return "严寒风险"
+            if (tempMed != null && tempMed < 5) return "低温风险"
+            if (s.precip > 2) return "明显降雨"
+            if (s.gustMax > 13.9) return "强阵风"
+            return ""
+        }
+
+        function utmbRiskEntry(s) {
+            const tags = []
+            if (s.riskLabel) tags.push(s.riskLabel)
+            if (s.modelValues.some(v => v.code != null && Number.isFinite(v.code) && v.code >= 95)) tags.push("雷暴")
+            if (!tags.length) return null
+            const cons = s.consensus || {}
+            let text = tags.join(" · ")
+            const evText = (cons.events || []).map(e => `${e.agree}/${cons.n}${e.label}`).join(" ")
+            if (cons.level === "SINGLE") text += " · 单模型"
+            else if (cons.level === "LOW") text += (evText ? " · " + evText : "") + " · 分歧大"
+            else if (cons.level) text += (evText ? " · " + evText : "") + " · 共识" + cons.level
+            return { sample: s, label: s.shortLabel, text, tags }
+        }
+
+        async function mapConcurrent(items, limit, fn) {
+            const results = new Array(items.length)
+            let next = 0
+            async function worker() {
+                while (next < items.length) {
+                    const i = next
+                    next += 1
+                    results[i] = await fn(items[i], i)
+                }
+            }
+            const workers = []
+            for (let w = 0; w < Math.min(limit, items.length); w++) {
+                workers.push(worker())
+            }
+            await Promise.all(workers)
+            return results
+        }
+
+        async function fetchModelWeather(model, lat, lon, elevation, startDate, endDate) {
+            const url = new URL(model.endpoint)
+            url.searchParams.set("latitude", lat)
+            url.searchParams.set("longitude", lon)
+            if (elevation != null && Number.isFinite(elevation)) {
+                url.searchParams.set("elevation", elevation)
+            }
+            url.searchParams.set("hourly", UTMB_HOURLY_VARS)
+            url.searchParams.set("models", model.id)
+            url.searchParams.set("wind_speed_unit", "ms")
+            url.searchParams.set("timezone", "auto")
+            url.searchParams.set("start_date", startDate)
+            url.searchParams.set("end_date", endDate)
+            const controller = new AbortController()
+            const timer = setTimeout(() => controller.abort(), 15000)
+            try {
+                const response = await fetch(url.toString(), { signal: controller.signal })
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}`)
+                }
+                const data = await response.json()
+                if (data.error) {
+                    throw new Error(data.reason || "模型不可用")
+                }
+                return data
+            } finally {
+                clearTimeout(timer)
+            }
+        }
 
         function isHistoricalRange(endDateStr) {
             const end = new Date(endDateStr + "T00:00:00")
@@ -975,7 +1133,7 @@
             if (elevation != null && Number.isFinite(elevation)) {
                 url.searchParams.set("elevation", elevation)
             }
-            url.searchParams.set("hourly", "weathercode,temperature_2m,apparent_temperature,windspeed_10m,winddirection_10m,precipitation_probability")
+            url.searchParams.set("hourly", "weathercode,temperature_2m,apparent_temperature,windspeed_10m,winddirection_10m,precipitation_probability,precipitation,windgusts_10m")
             url.searchParams.set("wind_speed_unit", "ms")
             url.searchParams.set("timezone", "auto")
             url.searchParams.set("start_date", startDate)
@@ -1045,6 +1203,16 @@
         }
 
         function analyzeRiskEntries(samples) {
+            if (samples[0] && samples[0].utmb) {
+                const entries = []
+                for (const s of samples) {
+                    const entry = utmbRiskEntry(s)
+                    if (entry) {
+                        entries.push(entry)
+                    }
+                }
+                return entries
+            }
             const entries = []
             for (const s of samples) {
                 const tags = []
@@ -1568,6 +1736,7 @@
 
             const layout = layoutCard(samples)
             const H = layout.H
+            const utmb = samples[0] && samples[0].utmb
             ctx.save()
             ctx.fillStyle = T.bg
             ctx.fillRect(0, 0, CARD_W, H)
@@ -1643,8 +1812,8 @@
             ctx.textAlign = "right"
             ctx.fillText("气温°C", COLS.temp, layout.tableHeaderY)
             ctx.fillText("体感°C", COLS.feel, layout.tableHeaderY)
-            ctx.fillText("降水%", COLS.precip, layout.tableHeaderY)
-            ctx.fillText("风速m/s", COLS.wind, layout.tableHeaderY)
+            ctx.fillText(utmb ? "降雨mm" : "降水%", COLS.precip, layout.tableHeaderY)
+            ctx.fillText(utmb ? "阵风m/s" : "风速m/s", COLS.wind, layout.tableHeaderY)
             ctx.fillText("里程km", COLS.km, layout.tableHeaderY)
             ctx.fillText("海拔m", COLS.alt, layout.tableHeaderY)
 
@@ -1688,10 +1857,17 @@
                 ctx.fillText(fmt(s.temperature, 1), COLS.temp, y)
                 ctx.fillStyle = s.apparentTemperature <= 5 ? T.cold : INK
                 ctx.fillText(fmt(s.apparentTemperature, 1), COLS.feel, y)
-                ctx.fillStyle = s.precipProb >= 60 ? ACCENT : INK
-                ctx.fillText(fmt(s.precipProb, 0), COLS.precip, y)
-                ctx.fillStyle = s.windSpeed >= 10 ? ACCENT : INK
-                ctx.fillText(fmt(s.windSpeed, 1), COLS.wind, y)
+                if (utmb) {
+                    ctx.fillStyle = s.precip > 2 ? ACCENT : INK
+                    ctx.fillText(fmt(s.precip, 1), COLS.precip, y)
+                    ctx.fillStyle = s.gustMax > 13.9 ? ACCENT : INK
+                    ctx.fillText(fmt(s.gustMed, 0), COLS.wind, y)
+                } else {
+                    ctx.fillStyle = s.precipProb >= 60 ? ACCENT : INK
+                    ctx.fillText(fmt(s.precipProb, 0), COLS.precip, y)
+                    ctx.fillStyle = s.windSpeed >= 10 ? ACCENT : INK
+                    ctx.fillText(fmt(s.windSpeed, 1), COLS.wind, y)
+                }
                 ctx.fillStyle = INK
                 ctx.fillText(s.distanceKm.toFixed(2), COLS.km, y)
                 ctx.fillText(fmt(s.ele, 0), COLS.alt, y)
@@ -1715,19 +1891,31 @@
         }
 
         function buildDisplaySamples(samples) {
-            return samples.map(s => ({
-                timeMs: s.timeMs,
-                timeLabel: s.timeLabel,
-                emoji: s.emoji,
-                weather: s.weather,
-                temperature: fmt(s.temperature, 1),
-                apparentTemperature: fmt(s.apparentTemperature, 1),
-                precipProb: fmt(s.precipProb, 0),
-                windSpeed: fmt(s.windSpeed, 1),
-                windDir: s.windDir,
-                distanceKm: fmt(s.distanceKm, 2),
-                ele: fmt(s.ele, 0)
-            }))
+            return samples.map(s => {
+                const display = {
+                    timeMs: s.timeMs,
+                    timeLabel: s.timeLabel,
+                    emoji: s.emoji,
+                    weather: s.weather,
+                    temperature: fmt(s.temperature, 1),
+                    apparentTemperature: fmt(s.apparentTemperature, 1),
+                    precipProb: fmt(s.precipProb, 0),
+                    windSpeed: fmt(s.windSpeed, 1),
+                    windDir: s.windDir,
+                    distanceKm: fmt(s.distanceKm, 2),
+                    ele: fmt(s.ele, 0),
+                    utmb: !!s.utmb
+                }
+                if (s.utmb) {
+                    const cons = s.consensus || {}
+                    display.tempRange = `${fmt(cons.tempMin, 1)}~${fmt(cons.tempMax, 1)}`
+                    display.rainModels = `${cons.rainCount}/${cons.n}`
+                    display.gust = `${fmt(s.gustMed, 0)}/${fmt(s.gustMax, 0)}`
+                    display.consensus = `${cons.level || "—"}${s.riskLabel ? " · " + s.riskLabel : ""}`
+                    display.modelCount = cons.n || 0
+                }
+                return display
+            })
         }
 
         function finalizeSamples(samples) {
@@ -1750,10 +1938,166 @@
             exportCardBtn.disabled = false
             exportCsvBtn.disabled = false
             shareBtn.disabled = false
-            profileSub.textContent = "气温沿里程 · 蓝条为降水概率 · " + tzLabel()
+            const utmb = samples[0] && samples[0].utmb
+            modelNote.style.display = utmb ? "" : "none"
+            profileSub.textContent = utmb
+                ? "气温中位数沿里程 · 蓝条为降雨模型占比 · " + tzLabel()
+                : "气温沿里程 · 蓝条为降水概率 · " + tzLabel()
         }
 
-        async function applyWeatherToSamples(samples, startDate, endDate) {
+        function finalizeUtmbSample(s) {
+            const values = s.modelValues
+            const temps = values.map(v => v.temp)
+            const apps = values.map(v => v.apparent)
+            const winds = values.map(v => v.wind)
+            const rains = values.map(v => v.precip)
+            const gusts = values.map(v => v.gust)
+            s.temperature = median(temps)
+            s.apparentTemperature = median(apps)
+            if (s.apparentTemperature == null) {
+                s.apparentTemperature = s.temperature
+            }
+            s.windSpeed = median(winds)
+            const dirEntry = values.find(v => v.dir != null && Number.isFinite(v.dir))
+            s.windDeg = dirEntry ? dirEntry.dir : null
+            s.windDir = windDirectionText(s.windDeg)
+            s.precip = median(rains)
+            const validGusts = gusts.filter(v => v != null && Number.isFinite(v))
+            s.gustMed = median(validGusts)
+            s.gustMax = validGusts.length ? Math.max.apply(null, validGusts) : null
+            s.rainCount = rains.filter(v => v != null && Number.isFinite(v) && v > 0.1).length
+            const n = values.length
+            s.precipProb = n ? (s.rainCount / n) * 100 : null
+            const codes = values.map(v => v.code).filter(v => v != null && Number.isFinite(v))
+            const code = mostFrequent(codes)
+            s.weatherCode = code
+            s.weather = code != null ? (weatherCodeMap[code] || "天气代码 " + code) : "-"
+            s.emoji = code != null ? weatherEmoji(code) : "🌡️"
+            const events = []
+            if (s.rainCount > 0) events.push({ key: "rain", label: "有雨", agree: s.rainCount })
+            const cold = temps.filter(v => v != null && Number.isFinite(v) && v < 5).length
+            if (cold > 0) events.push({ key: "cold", label: "低温<5°C", agree: cold })
+            const gustAgree = validGusts.filter(v => v > 13.9).length
+            if (gustAgree > 0) events.push({ key: "gust", label: "阵风>50km/h", agree: gustAgree })
+            const validTemps = temps.filter(v => v != null && Number.isFinite(v))
+            s.consensus = {
+                n,
+                level: utmbConsensusLevel(events, n),
+                events,
+                tempMin: validTemps.length ? Math.min.apply(null, validTemps) : null,
+                tempMax: validTemps.length ? Math.max.apply(null, validTemps) : null,
+                rainCount: s.rainCount
+            }
+            s.riskLabel = utmbRiskLabel(s, n)
+            s.utmb = true
+            s.utmbTried = s.utmbTried || []
+        }
+
+        async function applyUtmbWeather(samples, startDate, endDate) {
+            const grouped = new Map()
+            for (const sample of samples) {
+                const roundedLat = roundCoord(sample.lat)
+                const roundedLon = roundCoord(sample.lon)
+                const key = `${roundedLat.toFixed(3)},${roundedLon.toFixed(3)}`
+                sample.cacheKey = key
+                if (!grouped.has(key)) {
+                    grouped.set(key, { lat: roundedLat, lon: roundedLon, eles: [], samples: [] })
+                }
+                const group = grouped.get(key)
+                if (sample.ele != null && Number.isFinite(sample.ele)) {
+                    group.eles.push(sample.ele)
+                }
+                group.samples.push(sample)
+            }
+            const entries = Array.from(grouped.entries())
+            for (let i = 0; i < entries.length; i++) {
+                const entry = entries[i]
+                const group = entry[1]
+                const eles = group.eles
+                const elevation = eles.length ? eles.reduce((a, b) => a + b, 0) / eles.length : null
+                const modelIds = new Set()
+                for (const s of group.samples) {
+                    for (const m of modelsForSample(s.timeMs)) {
+                        modelIds.add(m.id)
+                    }
+                }
+                const ids = Array.from(modelIds)
+                if (ids.length) {
+                    setStatus(`正在获取多模型天气数据（${i + 1}/${entries.length} 个位置 · ${ids.length} 个模型）…`)
+                }
+                const results = {}
+                await mapConcurrent(ids, 3, async id => {
+                    try {
+                        results[id] = await fetchModelWeather(UTMB_MODELS[id], group.lat, group.lon, elevation, startDate, endDate)
+                    } catch (err) {
+                        results[id] = { error: err.message || "不可用" }
+                    }
+                })
+                for (const s of group.samples) {
+                    const tried = modelsForSample(s.timeMs)
+                    s.utmbTried = tried
+                    const values = []
+                    for (const m of tried) {
+                        const res = results[m.id]
+                        if (!res || res.error || !res.hourly || !res.hourly.time || !res.hourly.time.length) {
+                            continue
+                        }
+                        const times = res.hourly.time
+                        const idx = matchHourIndex(times, s.timeMs, offsetSec)
+                        const parsed = Date.parse(String(times[idx]).replace(" ", "T") + ":00Z")
+                        const targetWall = Date.parse(courseLocalTimeStr(s.timeMs, offsetSec) + ":00Z")
+                        if (Math.abs(parsed - targetWall) > 5400000) {
+                            continue
+                        }
+                        values.push({
+                            name: m.name,
+                            temp: res.hourly.temperature_2m[idx],
+                            apparent: (res.hourly.apparent_temperature || [])[idx],
+                            precip: res.hourly.precipitation[idx],
+                            wind: res.hourly.windspeed_10m[idx],
+                            dir: (res.hourly.winddirection_10m || [])[idx],
+                            gust: (res.hourly.windgusts_10m || [])[idx],
+                            code: (res.hourly.weathercode || [])[idx]
+                        })
+                    }
+                    s.modelValues = values
+                }
+            }
+
+            let anyCovered = 0
+            for (const s of samples) {
+                if (s.modelValues && s.modelValues.length) {
+                    anyCovered += 1
+                }
+            }
+            if (!anyCovered) {
+                return false
+            }
+
+            for (const s of samples) {
+                if (s.modelValues && s.modelValues.length) {
+                    finalizeUtmbSample(s)
+                    continue
+                }
+                const fallback = await fetchWeather(s.lat, s.lon, startDate, endDate, s.ele)
+                const idx = matchHourIndex(fallback.hourly.time, s.timeMs, offsetSec)
+                s.modelValues = [{
+                    name: "Best Match",
+                    temp: fallback.hourly.temperature_2m[idx],
+                    apparent: fallback.hourly.apparent_temperature[idx],
+                    precip: fallback.hourly.precipitation[idx],
+                    wind: fallback.hourly.windspeed_10m[idx],
+                    dir: fallback.hourly.winddirection_10m[idx],
+                    gust: (fallback.hourly.windgusts_10m || [])[idx],
+                    code: fallback.hourly.weathercode[idx]
+                }]
+                s.utmbFallback = true
+                finalizeUtmbSample(s)
+            }
+            return true
+        }
+
+        async function applyNormalWeather(samples, startDate, endDate) {
             const grouped = new Map()
             for (const sample of samples) {
                 const roundedLat = roundCoord(sample.lat)
@@ -1799,6 +2143,40 @@
                 sample.windDir = windDirectionText(sample.windDeg)
                 sample.precipProb = data.hourly.precipitation_probability[idx]
             }
+        }
+
+        async function applyWeatherToSamples(samples, startDate, endDate) {
+            if (utmbMode && isHistoricalRange(endDate)) {
+                setStatus("UTMB 模式仅支持近期预报，历史日期已回退默认数据源…")
+                await applyNormalWeather(samples, startDate, endDate)
+                return "normal"
+            }
+            if (utmbMode) {
+                const covered = await applyUtmbWeather(samples, startDate, endDate)
+                if (!covered) {
+                    setStatus("UTMB 模式无可用模型，已回退默认数据源…")
+                    await applyNormalWeather(samples, startDate, endDate)
+                    return "fallback"
+                }
+                return "utmb"
+            }
+            await applyNormalWeather(samples, startDate, endDate)
+            return "normal"
+        }
+
+        function utmbStatusSuffix(samples, mode) {
+            if (mode === "utmb") {
+                const counts = samples.map(s => (s.modelValues ? s.modelValues.length : 0))
+                const maxModels = Math.max.apply(null, counts)
+                if (maxModels <= 1) {
+                    return " · 多模型共识：远期仅 ECMWF 单模型趋势"
+                }
+                return ` · 多模型共识：最多 ${maxModels} 个模型`
+            }
+            if (mode === "fallback") {
+                return " · UTMB 模型不可用，已回退默认数据源"
+            }
+            return ""
         }
 
         function prepareCanvas(canvas, cssH) {
@@ -1849,16 +2227,35 @@
                 tableWrapper.innerHTML = ""
                 return
             }
+            const utmb = displaySamples[0] && displaySamples[0].utmb
             const rows = displaySamples.map((s, i) => {
                 const precipNum = Number(s.precipProb)
                 const windNum = Number(s.windSpeed)
                 const appTempNum = Number(s.apparentTemperature)
-                return `
-                    <tr class="${i === selectedIndex ? "sel" : ""}" data-i="${i}">
+                const tempNum = Number(s.temperature)
+                const cells = `
                         <td class="mono">${s.timeLabel}</td>
                         <td>${s.emoji} ${s.weather}</td>
-                        <td class="mono">${s.temperature}</td>
-                        <td class="mono ${Number.isFinite(appTempNum) && appTempNum <= 5 ? "cold" : ""}">${s.apparentTemperature}</td>
+                        <td class="mono ${Number.isFinite(tempNum) && tempNum < 5 ? "cold" : ""}">${s.temperature}</td>
+                        <td class="mono ${Number.isFinite(appTempNum) && appTempNum <= 5 ? "cold" : ""}">${s.apparentTemperature}</td>`
+                if (utmb) {
+                    return `
+                    <tr class="${i === selectedIndex ? "sel" : ""}" data-i="${i}">
+                        ${cells}
+                        <td class="mono">${s.tempRange}</td>
+                        <td class="mono">${s.rainModels}</td>
+                        <td class="mono ${Number.isFinite(windNum) && windNum >= 10 ? "warn" : ""}">${s.windSpeed}</td>
+                        <td class="mono">${s.gust}</td>
+                        <td>${s.windDir}</td>
+                        <td class="mono">${s.distanceKm}</td>
+                        <td class="mono">${s.ele}</td>
+                        <td class="mono" style="font-size:0.85em;">${s.consensus}</td>
+                    </tr>
+                `
+                }
+                return `
+                    <tr class="${i === selectedIndex ? "sel" : ""}" data-i="${i}">
+                        ${cells}
                         <td class="mono ${Number.isFinite(precipNum) && precipNum >= 60 ? "warn" : ""}">${s.precipProb}</td>
                         <td class="mono ${Number.isFinite(windNum) && windNum >= 10 ? "warn" : ""}">${s.windSpeed}</td>
                         <td>${s.windDir}</td>
@@ -1867,9 +2264,21 @@
                     </tr>
                 `
             }).join("")
-            tableWrapper.innerHTML = `
-                <table>
-                    <thead>
+            const headerRow = utmb ? `
+                        <tr>
+                            <th>时间</th>
+                            <th>天气情况</th>
+                            <th>气温 (°C)</th>
+                            <th>体感温度 (°C)</th>
+                            <th>范围 (°C)</th>
+                            <th>降雨 (模型)</th>
+                            <th>风速 (m/s)</th>
+                            <th>阵风 (中/大 m/s)</th>
+                            <th>风向</th>
+                            <th>沿线里程 (km)</th>
+                            <th>海拔 (m)</th>
+                            <th>共识 · 风险</th>
+                        </tr>` : `
                         <tr>
                             <th>时间</th>
                             <th>天气情况</th>
@@ -1880,7 +2289,11 @@
                             <th>风向</th>
                             <th>沿线里程 (km)</th>
                             <th>海拔 (m)</th>
-                        </tr>
+                        </tr>`
+            tableWrapper.innerHTML = `
+                <table>
+                    <thead>
+                        ${headerRow}
                     </thead>
                     <tbody>
                         ${rows}
@@ -1909,6 +2322,23 @@
             dWindDir.textContent = s.windDir
             dKm.textContent = fmt(s.distanceKm, 2) + "km"
             dEle.textContent = fmt(s.ele, 0) + "m"
+            if (s.utmb && s.modelValues && s.modelValues.length) {
+                modelsBox.style.display = ""
+                const cons = s.consensus || {}
+                const lines = []
+                lines.push(`<div style="color: #c2410c;">共识 ${cons.level || "—"}${s.riskLabel ? " · " + s.riskLabel : ""} · 温度 ${fmt(cons.tempMin, 1)}~${fmt(cons.tempMax, 1)}°C · ${cons.rainCount}/${cons.n} 模型有雨 · 阵风 ${fmt(s.gustMed, 0)}/${fmt(s.gustMax, 0)}m/s</div>`)
+                for (const v of s.modelValues) {
+                    lines.push(`<div>${v.name}：${fmt(v.temp, 1)}°C · 雨 ${fmt(v.precip, 1)}mm/h · 阵风 ${fmt(v.gust, 0)}m/s</div>`)
+                }
+                const triedNames = (s.utmbTried || []).map(m => m.name)
+                const missing = triedNames.filter(name => !s.modelValues.some(v => v.name === name))
+                for (const name of missing) {
+                    lines.push(`<div style="color: #8a8a8a;">${name}：不可用</div>`)
+                }
+                modelsList.innerHTML = lines.join("")
+            } else {
+                modelsBox.style.display = "none"
+            }
         }
 
         function selectSample(i) {
@@ -1955,18 +2385,42 @@
             if (!lastSamples.length) {
                 return
             }
-            const header = ["时间", "天气", "气温(°C)", "体感(°C)", "降水概率(%)", "风速(m/s)", "风向", "沿线里程(km)", "海拔(m)"]
-            const rows = lastSamples.map(item => [
-                item.fullLabel,
-                item.weather,
-                fmt(item.temperature, 1),
-                fmt(item.apparentTemperature, 1),
-                fmt(item.precipProb, 0),
-                fmt(item.windSpeed, 1),
-                item.windDir,
-                fmt(item.distanceKm, 2),
-                fmt(item.ele, 0)
-            ])
+            const utmb = lastSamples[0] && lastSamples[0].utmb
+            let header
+            let rows
+            if (utmb) {
+                header = ["时间", "天气", "气温(°C,中位)", "范围(°C)", "体感(°C)", "降雨(模型)", "风速(m/s)", "阵风(中/大 m/s)", "风向", "沿线里程(km)", "海拔(m)", "共识·风险"]
+                rows = lastSamples.map(item => {
+                    const cons = item.consensus || {}
+                    return [
+                        item.fullLabel,
+                        item.weather,
+                        fmt(item.temperature, 1),
+                        `${fmt(cons.tempMin, 1)}~${fmt(cons.tempMax, 1)}`,
+                        fmt(item.apparentTemperature, 1),
+                        `${cons.rainCount}/${cons.n}`,
+                        fmt(item.windSpeed, 1),
+                        `${fmt(item.gustMed, 0)}/${fmt(item.gustMax, 0)}`,
+                        item.windDir,
+                        fmt(item.distanceKm, 2),
+                        fmt(item.ele, 0),
+                        `${cons.level || "—"}${item.riskLabel ? " · " + item.riskLabel : ""}`
+                    ]
+                })
+            } else {
+                header = ["时间", "天气", "气温(°C)", "体感(°C)", "降水概率(%)", "风速(m/s)", "风向", "沿线里程(km)", "海拔(m)"]
+                rows = lastSamples.map(item => [
+                    item.fullLabel,
+                    item.weather,
+                    fmt(item.temperature, 1),
+                    fmt(item.apparentTemperature, 1),
+                    fmt(item.precipProb, 0),
+                    fmt(item.windSpeed, 1),
+                    item.windDir,
+                    fmt(item.distanceKm, 2),
+                    fmt(item.ele, 0)
+                ])
+            }
             const csv = "\uFEFF" + [header, ...rows].map(row => row.map(cell => `"${String(cell).replace(/"/g, "\"\"")}"`).join(",")).join("\n")
             const safeStart = lastRange.start ? formatFileTime(lastRange.start) : ""
             const safeEnd = lastRange.end ? formatFileTime(lastRange.end) : ""
@@ -2124,6 +2578,10 @@
             exportLightBtn.classList.remove("on")
         })
 
+        utmbModeInput.addEventListener("change", () => {
+            utmbMode = utmbModeInput.checked
+        })
+
         profileCanvas.addEventListener("click", event => {
             if (!lastSamples.length) return
             const rect = profileCanvas.getBoundingClientRect()
@@ -2162,7 +2620,17 @@
                     atemp: s.apparentTemperature,
                     ws: s.windSpeed,
                     wd: s.windDeg,
-                    p: s.precipProb
+                    p: s.precipProb,
+                    u: s.utmb ? {
+                        min: s.consensus.tempMin,
+                        max: s.consensus.tempMax,
+                        rainN: s.consensus.rainCount,
+                        n: s.consensus.n,
+                        level: s.consensus.level,
+                        risk: s.riskLabel,
+                        gustMax: s.gustMax,
+                        models: s.modelValues.map(v => ({ n: v.name, t: v.temp, r: v.precip, g: v.gust }))
+                    } : null
                 })),
                 fileName: gpxFileName,
                 start: lastRange.start ? lastRange.start.getTime() : null,
@@ -2202,22 +2670,40 @@
             }
             offsetSec = Number.isFinite(data.offset) ? data.offset : browserOffsetSec()
             tzName = data.tz || ""
-            lastSamples = data.samples.map(s => ({
-                timeMs: s.t,
-                lat: s.lat,
-                lon: s.lon,
-                distanceKm: s.d,
-                ele: s.e,
-                weatherCode: s.c,
-                weather: s.w,
-                temperature: s.temp,
-                apparentTemperature: s.atemp != null ? s.atemp : s.temp,
-                windSpeed: s.ws,
-                windDeg: s.wd,
-                windDir: windDirectionText(s.wd),
-                precipProb: s.p,
-                emoji: weatherEmoji(s.c)
-            }))
+            lastSamples = data.samples.map(s => {
+                const sample = {
+                    timeMs: s.t,
+                    lat: s.lat,
+                    lon: s.lon,
+                    distanceKm: s.d,
+                    ele: s.e,
+                    weatherCode: s.c,
+                    weather: s.w,
+                    temperature: s.temp,
+                    apparentTemperature: s.atemp != null ? s.atemp : s.temp,
+                    windSpeed: s.ws,
+                    windDeg: s.wd,
+                    windDir: windDirectionText(s.wd),
+                    precipProb: s.p,
+                    emoji: weatherEmoji(s.c)
+                }
+                if (s.u) {
+                    sample.utmb = true
+                    sample.modelValues = (s.u.models || []).map(v => ({ name: v.n, temp: v.t, precip: v.r, gust: v.g }))
+                    sample.gustMax = s.u.gustMax
+                    sample.consensus = {
+                        n: s.u.n,
+                        level: s.u.level,
+                        tempMin: s.u.min,
+                        tempMax: s.u.max,
+                        rainCount: s.u.rainN,
+                        events: []
+                    }
+                    sample.riskLabel = s.u.risk
+                    sample.utmbTried = []
+                }
+                return sample
+            })
             gpxFileName = data.fileName || "shared"
             if (data.start) {
                 lastRange.start = new Date(data.start)
@@ -2328,9 +2814,9 @@
                 const fetchStart = new Date(startMs + offsetSec * 1000 - 86400000)
                 const fetchEnd = new Date(endMs + offsetSec * 1000 + 86400000)
                 weatherCache.clear()
-                await applyWeatherToSamples(lastSamples, dateStrUtc(fetchStart), dateStrUtc(fetchEnd))
+                const mode = await applyWeatherToSamples(lastSamples, dateStrUtc(fetchStart), dateStrUtc(fetchEnd))
                 finalizeSamples(lastSamples)
-                setStatus(`刷新完成，共 ${lastSamples.length} 个采样点`)
+                setStatus(`刷新完成，共 ${lastSamples.length} 个采样点` + utmbStatusSuffix(lastSamples, mode))
             } catch (error) {
                 console.error("天气数据刷新失败：", error)
                 setStatus("❌ " + (error.message || "刷新天气数据失败"))
@@ -2412,10 +2898,10 @@
                 weatherCache.clear()
                 const fetchStart = new Date(start.getTime() + offset * 1000 - 86400000)
                 const fetchEnd = new Date(end.getTime() + offset * 1000 + 86400000)
-                await applyWeatherToSamples(samples, dateStrUtc(fetchStart), dateStrUtc(fetchEnd))
+                const mode = await applyWeatherToSamples(samples, dateStrUtc(fetchStart), dateStrUtc(fetchEnd))
                 finalizeSamples(samples)
                 tzNote.textContent = "赛道时区：" + tzLabel() + " · 时间按赛道当地时间填写与显示"
-                setStatus(`完成，共 ${samples.length} 个采样点`)
+                setStatus(`完成，共 ${samples.length} 个采样点` + utmbStatusSuffix(samples, mode))
             } catch (error) {
                 console.error("天气数据获取失败：", error)
                 const errorMsg = error.message || "获取天气数据失败"
