@@ -500,6 +500,7 @@
                                 <div class="dg"><div class="dg-k">风速</div><div class="dg-v" id="dWind"></div></div>
                                 <div class="dg"><div class="dg-k">风向</div><div class="dg-v" id="dWindDir"></div></div>
                                 <div class="dg"><div class="dg-k">沿线里程</div><div class="dg-v" id="dKm"></div></div>
+                                <div class="dg"><div class="dg-k">海拔</div><div class="dg-v" id="dEle"></div></div>
                             </div>
                         </div>
                     </div>
@@ -560,6 +561,7 @@
         const dWind = document.getElementById("dWind")
         const dWindDir = document.getElementById("dWindDir")
         const dKm = document.getElementById("dKm")
+        const dEle = document.getElementById("dEle")
         const tableWrapper = document.getElementById("tableWrapper")
 
         let gpxData = null
@@ -810,6 +812,36 @@
             return R * c
         }
 
+        function cleanElevations(points) {
+            const n = points.length
+            const out = points.map(p => (p.ele != null && Number.isFinite(p.ele) ? p.ele : null))
+            let last = null
+            for (let i = 0; i < n; i++) {
+                if (out[i] !== null) last = out[i]
+                else out[i] = last
+            }
+            let next = null
+            for (let i = n - 1; i >= 0; i--) {
+                if (out[i] !== null) next = out[i]
+                else out[i] = next
+            }
+            let prevIdx = -1
+            for (let i = 0; i < n; i++) {
+                const v = points[i].ele
+                if (v != null && Number.isFinite(v)) {
+                    if (prevIdx >= 0 && i - prevIdx > 1) {
+                        const v0 = points[prevIdx].ele
+                        const span = i - prevIdx
+                        for (let j = prevIdx + 1; j < i; j++) {
+                            out[j] = v0 + (v - v0) * ((j - prevIdx) / span)
+                        }
+                    }
+                    prevIdx = i
+                }
+            }
+            return out
+        }
+
         function buildTrack(points) {
             if (points.length < 2) {
                 return null
@@ -820,7 +852,7 @@
                 total += haversine(points[i - 1], points[i])
                 distances.push(total)
             }
-            return { points, distances, totalDistance: total }
+            return { points, distances, elevations: cleanElevations(points), totalDistance: total }
         }
 
         function parseGpx(text) {
@@ -837,10 +869,12 @@
             for (const pt of points) {
                 const lat = parseFloat(pt.getAttribute("lat"))
                 const lon = parseFloat(pt.getAttribute("lon"))
+                const eleNode = pt.getElementsByTagName("ele")[0]
+                const ele = eleNode ? parseFloat(eleNode.textContent) : NaN
                 const timeNode = pt.getElementsByTagName("time")[0]
                 const time = timeNode ? new Date(timeNode.textContent) : null
                 if (Number.isFinite(lat) && Number.isFinite(lon)) {
-                    result.push({ lat, lon, time: time && !Number.isNaN(time.getTime()) ? time : null })
+                    result.push({ lat, lon, ele: Number.isFinite(ele) ? ele : null, time: time && !Number.isNaN(time.getTime()) ? time : null })
                 }
             }
             return buildTrack(result)
@@ -862,11 +896,13 @@
                 const latNode = position.getElementsByTagName("LatitudeDegrees")[0]
                 const lonNode = position.getElementsByTagName("LongitudeDegrees")[0]
                 const timeNode = pt.getElementsByTagName("Time")[0]
+                const altNode = pt.getElementsByTagName("AltitudeMeters")[0]
                 const lat = latNode ? parseFloat(latNode.textContent) : NaN
                 const lon = lonNode ? parseFloat(lonNode.textContent) : NaN
+                const ele = altNode ? parseFloat(altNode.textContent) : NaN
                 const time = timeNode ? new Date(timeNode.textContent) : null
                 if (Number.isFinite(lat) && Number.isFinite(lon)) {
-                    result.push({ lat, lon, time: time && !Number.isNaN(time.getTime()) ? time : null })
+                    result.push({ lat, lon, ele: Number.isFinite(ele) ? ele : null, time: time && !Number.isNaN(time.getTime()) ? time : null })
                 }
             }
             return buildTrack(result)
@@ -886,7 +922,12 @@
             const p2 = points[i + 1]
             const lat = p1.lat + (p2.lat - p1.lat) * ratio
             const lon = p1.lon + (p2.lon - p1.lon) * ratio
-            return { lat, lon, index: i }
+            const e1 = gpx.elevations[i]
+            const e2 = gpx.elevations[i + 1]
+            const ele = e1 != null && Number.isFinite(e1) && e2 != null && Number.isFinite(e2)
+                ? e1 + (e2 - e1) * ratio
+                : (e1 != null && Number.isFinite(e1) ? e1 : e2)
+            return { lat, lon, ele, index: i }
         }
 
         function roundCoord(value, decimals = 3) {
@@ -921,8 +962,8 @@
             return diffDays > HISTORICAL_DAYS_THRESHOLD
         }
 
-        async function fetchWeather(lat, lon, startDate, endDate) {
-            const key = `${lat.toFixed(3)},${lon.toFixed(3)}`
+        async function fetchWeather(lat, lon, startDate, endDate, elevation) {
+            const key = `${lat.toFixed(3)},${lon.toFixed(3)},${elevation != null && Number.isFinite(elevation) ? Math.round(elevation) : "-"}`
             if (weatherCache.has(key)) {
                 return weatherCache.get(key)
             }
@@ -931,6 +972,9 @@
             const url = new URL(apiBase)
             url.searchParams.set("latitude", lat)
             url.searchParams.set("longitude", lon)
+            if (elevation != null && Number.isFinite(elevation)) {
+                url.searchParams.set("elevation", elevation)
+            }
             url.searchParams.set("hourly", "weathercode,temperature_2m,apparent_temperature,windspeed_10m,winddirection_10m,precipitation_probability")
             url.searchParams.set("wind_speed_unit", "ms")
             url.searchParams.set("timezone", "auto")
@@ -1029,7 +1073,7 @@
             }
             const mid = track.points[Math.floor(track.points.length / 2)]
             const now = Date.now()
-            track._offsetPromise = fetchWeather(mid.lat, mid.lon, dateStr(new Date(now - 86400000)), dateStr(new Date(now + 86400000)))
+            track._offsetPromise = fetchWeather(mid.lat, mid.lon, dateStr(new Date(now - 86400000)), dateStr(new Date(now + 86400000)), mid.ele)
                 .then(data => {
                     const offset = Number.isFinite(data.utc_offset_seconds) ? data.utc_offset_seconds : browserOffsetSec()
                     track.utcOffsetSec = offset
@@ -1459,14 +1503,15 @@
         }
 
         const COLS = {
-            time: 80,
-            weather: 190,
-            weatherText: 230,
-            temp: 470,
-            feel: 560,
-            precip: 640,
-            wind: 740,
-            km: 920
+            time: 70,
+            weather: 160,
+            weatherText: 205,
+            temp: 425,
+            feel: 512,
+            precip: 590,
+            wind: 665,
+            km: 785,
+            alt: 920
         }
 
         function layoutCard(samples) {
@@ -1601,6 +1646,7 @@
             ctx.fillText("降水%", COLS.precip, layout.tableHeaderY)
             ctx.fillText("风速m/s", COLS.wind, layout.tableHeaderY)
             ctx.fillText("里程km", COLS.km, layout.tableHeaderY)
+            ctx.fillText("海拔m", COLS.alt, layout.tableHeaderY)
 
             ctx.strokeStyle = HAIR
             ctx.beginPath()
@@ -1648,6 +1694,7 @@
                 ctx.fillText(fmt(s.windSpeed, 1), COLS.wind, y)
                 ctx.fillStyle = INK
                 ctx.fillText(s.distanceKm.toFixed(2), COLS.km, y)
+                ctx.fillText(fmt(s.ele, 0), COLS.alt, y)
                 ctx.textAlign = "left"
                 y += layout.rowH
                 rowIndex += 1
@@ -1664,7 +1711,7 @@
         }
 
         function fmt(value, digits) {
-            return Number.isFinite(value) ? value.toFixed(digits) : "-"
+            return value != null && Number.isFinite(value) ? value.toFixed(digits) : "-"
         }
 
         function buildDisplaySamples(samples) {
@@ -1678,7 +1725,8 @@
                 precipProb: fmt(s.precipProb, 0),
                 windSpeed: fmt(s.windSpeed, 1),
                 windDir: s.windDir,
-                distanceKm: fmt(s.distanceKm, 2)
+                distanceKm: fmt(s.distanceKm, 2),
+                ele: fmt(s.ele, 0)
             }))
         }
 
@@ -1713,7 +1761,10 @@
                 const key = `${roundedLat.toFixed(3)},${roundedLon.toFixed(3)}`
                 sample.cacheKey = key
                 if (!grouped.has(key)) {
-                    grouped.set(key, { lat: roundedLat, lon: roundedLon })
+                    grouped.set(key, { lat: roundedLat, lon: roundedLon, eles: [] })
+                }
+                if (sample.ele != null && Number.isFinite(sample.ele)) {
+                    grouped.get(key).eles.push(sample.ele)
                 }
             }
             const entries = Array.from(grouped.entries())
@@ -1721,7 +1772,9 @@
             for (let i = 0; i < entries.length; i++) {
                 const entry = entries[i]
                 setStatus(`正在获取天气数据（${i + 1}/${entries.length} 个位置）…`)
-                const data = await fetchWeather(entry[1].lat, entry[1].lon, startDate, endDate)
+                const eles = entry[1].eles
+                const elevation = eles.length ? eles.reduce((a, b) => a + b, 0) / eles.length : null
+                const data = await fetchWeather(entry[1].lat, entry[1].lon, startDate, endDate, elevation)
                 dataByKey.set(entry[0], data)
                 if (i === 0) {
                     if (Number.isFinite(data.utc_offset_seconds)) {
@@ -1810,6 +1863,7 @@
                         <td class="mono ${Number.isFinite(windNum) && windNum >= 10 ? "warn" : ""}">${s.windSpeed}</td>
                         <td>${s.windDir}</td>
                         <td class="mono">${s.distanceKm}</td>
+                        <td class="mono">${s.ele}</td>
                     </tr>
                 `
             }).join("")
@@ -1825,6 +1879,7 @@
                             <th>风速 (m/s)</th>
                             <th>风向</th>
                             <th>沿线里程 (km)</th>
+                            <th>海拔 (m)</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -1853,6 +1908,7 @@
             dWind.textContent = fmt(s.windSpeed, 1) + "m/s"
             dWindDir.textContent = s.windDir
             dKm.textContent = fmt(s.distanceKm, 2) + "km"
+            dEle.textContent = fmt(s.ele, 0) + "m"
         }
 
         function selectSample(i) {
@@ -1899,7 +1955,7 @@
             if (!lastSamples.length) {
                 return
             }
-            const header = ["时间", "天气", "气温(°C)", "体感(°C)", "降水概率(%)", "风速(m/s)", "风向", "沿线里程(km)"]
+            const header = ["时间", "天气", "气温(°C)", "体感(°C)", "降水概率(%)", "风速(m/s)", "风向", "沿线里程(km)", "海拔(m)"]
             const rows = lastSamples.map(item => [
                 item.fullLabel,
                 item.weather,
@@ -1908,7 +1964,8 @@
                 fmt(item.precipProb, 0),
                 fmt(item.windSpeed, 1),
                 item.windDir,
-                fmt(item.distanceKm, 2)
+                fmt(item.distanceKm, 2),
+                fmt(item.ele, 0)
             ])
             const csv = "\uFEFF" + [header, ...rows].map(row => row.map(cell => `"${String(cell).replace(/"/g, "\"\"")}"`).join(",")).join("\n")
             const safeStart = lastRange.start ? formatFileTime(lastRange.start) : ""
@@ -2098,6 +2155,7 @@
                     lat: s.lat,
                     lon: s.lon,
                     d: s.distanceKm,
+                    e: s.ele,
                     c: s.weatherCode,
                     w: s.weather,
                     temp: s.temperature,
@@ -2149,6 +2207,7 @@
                 lat: s.lat,
                 lon: s.lon,
                 distanceKm: s.d,
+                ele: s.e,
                 weatherCode: s.c,
                 weather: s.w,
                 temperature: s.temp,
@@ -2346,6 +2405,7 @@
                         time,
                         lat: pos.lat,
                         lon: pos.lon,
+                        ele: pos.ele,
                         distanceKm: targetDistance / 1000
                     })
                 }
