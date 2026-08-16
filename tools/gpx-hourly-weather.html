@@ -4,7 +4,6 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>GPX 逐小时气象采样</title>
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/pako@2.1.0/dist/pako.min.js"></script>
     <style>
         * {
@@ -56,11 +55,11 @@
             .content {
                 grid-template-columns: 400px 1fr;
             }
-            
+
             .card-left {
                 grid-column: 1;
             }
-            
+
             .card-right {
                 grid-column: 2;
                 grid-row: 1 / 4;
@@ -113,12 +112,18 @@
             color: #4a4a4a;
         }
 
-        input[type="datetime-local"] {
+        input[type="datetime-local"],
+        input[type="number"],
+        input[type="text"] {
             width: 100%;
             padding: 10px 12px;
             border-radius: 8px;
             border: 1px solid #d9d9d9;
             font-size: 0.95em;
+        }
+
+        input[type="number"] {
+            font-family: Menlo, Consolas, monospace;
         }
 
         .btn {
@@ -144,20 +149,214 @@
             box-shadow: 0 8px 18px rgba(0, 198, 255, 0.35);
         }
 
+        .btn-line {
+            padding: 12px 16px;
+            border: 1px solid #4facfe;
+            border-radius: 10px;
+            background: #ffffff;
+            color: #4facfe;
+            font-weight: 600;
+            font-size: 1em;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            width: 100%;
+        }
+
+        .btn-line:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+        }
+
+        .btn-line:hover:not(:disabled) {
+            background: #f5fbff;
+        }
+
+        .btn-mini {
+            font-size: 0.85em;
+            padding: 6px 14px;
+            border-radius: 8px;
+            border: 1px solid #4facfe;
+            background: #ffffff;
+            color: #4facfe;
+            cursor: pointer;
+            white-space: nowrap;
+        }
+
+        .btn-mini:hover {
+            background: #f5fbff;
+        }
+
         .status {
             margin-top: 10px;
             color: #1f6f8b;
             font-size: 0.95em;
         }
 
-        .chart-wrapper {
-            width: 100%;
-            overflow-x: auto;
+        .seg {
+            display: flex;
+            border: 1px solid #d9d9d9;
+            border-radius: 10px;
+            overflow: hidden;
+            margin-bottom: 10px;
         }
 
-        #weatherChart {
+        .seg-item {
+            flex: 1;
+            padding: 10px;
+            background: #ffffff;
+            color: #6b6b6b;
+            border: none;
+            cursor: pointer;
+            font-weight: 600;
+            font-size: 0.95em;
+        }
+
+        .seg-item.on {
+            background: linear-gradient(135deg, #4facfe 0%, #00c6ff 100%);
+            color: #ffffff;
+        }
+
+        .dur-presets {
+            display: flex;
+            gap: 8px;
+            margin-top: 8px;
+        }
+
+        .dur-chip {
+            padding: 6px 16px;
+            border: 1px solid #d9d9d9;
+            border-radius: 999px;
+            cursor: pointer;
+            font-size: 0.9em;
+            color: #4a4a4a;
+            font-family: Menlo, Consolas, monospace;
+            background: #ffffff;
+        }
+
+        .dur-chip.on {
+            border-color: #4facfe;
+            color: #4facfe;
+            background: #f5fbff;
+            font-weight: 600;
+        }
+
+        .note {
+            color: #6b6b6b;
+            font-size: 0.85em;
+            margin-top: 8px;
+        }
+
+        .sec-block {
+            margin-top: 20px;
+            padding-top: 20px;
+            border-top: 1px solid #f0f0f0;
+        }
+
+        .sec-block h3 {
+            font-size: 1.05em;
+            color: #2d2d2d;
+        }
+
+        .sec-sub {
+            color: #8a8a8a;
+            font-weight: 400;
+            font-size: 0.85em;
+            margin-left: 8px;
+        }
+
+        .chart-head {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .chart-canvas {
             width: 100%;
-            min-height: 320px;
+            display: block;
+            margin-top: 8px;
+        }
+
+        .chart-hint {
+            color: #8a8a8a;
+            font-size: 0.85em;
+            margin-top: 8px;
+            text-align: center;
+        }
+
+        .detail {
+            margin-top: 14px;
+            background: #f7fafc;
+            border-radius: 12px;
+            padding: 14px 16px;
+        }
+
+        .detail-top {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .detail-emoji {
+            font-size: 1.6em;
+        }
+
+        .detail-time {
+            font-family: Menlo, Consolas, monospace;
+            font-weight: 600;
+        }
+
+        .detail-weather {
+            color: #4a4a4a;
+        }
+
+        .detail-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+            gap: 10px;
+            margin-top: 12px;
+        }
+
+        .dg-k {
+            color: #6b6b6b;
+            font-size: 0.8em;
+        }
+
+        .dg-v {
+            font-weight: 600;
+            font-family: Menlo, Consolas, monospace;
+        }
+
+        .risk-row {
+            display: flex;
+            gap: 8px;
+            overflow-x: auto;
+            padding-bottom: 4px;
+            flex-wrap: wrap;
+        }
+
+        .chip-risk {
+            white-space: nowrap;
+            background: #fff4ec;
+            color: #c2410c;
+            border: 1px solid #ffd7c2;
+            padding: 6px 12px;
+            border-radius: 999px;
+            font-size: 0.85em;
+        }
+
+        .chip-ok {
+            color: #2e7d32;
+            background: #eef7ee;
+            border: 1px solid #cde8cd;
+            padding: 6px 12px;
+            border-radius: 999px;
+            display: inline-block;
+            font-size: 0.9em;
+        }
+
+        .mono {
+            font-family: Menlo, Consolas, monospace;
         }
 
         table {
@@ -175,11 +374,33 @@
         th {
             background: #f5fbff;
         }
- card-left
-        .note {
-            color: #6b6b6b;
-            font-size: 0.85em;
-            margin-top: 8px;
+
+        tbody tr {
+            cursor: pointer;
+        }
+
+        tbody tr:hover {
+            background: #f5fbff;
+        }
+
+        tbody tr.sel {
+            background: #fff4ec;
+        }
+
+        .warn {
+            color: #c2410c;
+            font-weight: 700;
+        }
+
+        .cold {
+            color: #2563eb;
+            font-weight: 700;
+        }
+
+        .actions {
+            display: grid;
+            grid-template-columns: 1fr;
+            gap: 10px;
         }
     </style>
 </head>
@@ -187,7 +408,7 @@
     <div class="container">
         <div class="header">
             <h1>🌤️ GPX 逐小时气象采样</h1>
-            <p>读取 GPX 路线并按匀速逐小时采样，调用 Open-Meteo 获取天气、气温、风力、风向。</p>
+            <p>读取 GPX 路线并按匀速逐小时采样，调用 Open-Meteo 获取天气、气温、体感、风力、风向与降水概率。</p>
         </div>
         <div class="content">
             <div class="card">
@@ -195,49 +416,109 @@
                 <div id="uploadArea" class="upload-area">
                     <div style="font-size: 2em;">📤</div>
                     <p style="margin-top: 8px;">拖拽 GPX/TCX 文件至此或点击选择</p>
-                    <p style="margin-top: 6px; color: #6b6b6b; font-size: 0.9em;">支持 .gpx / .tcx</p>
+                    <p style="margin-top: 6px; color: #6b6b6b; font-size: 0.9em;">支持 .gpx / .tcx · 5MB 以内</p>
                 </div>
                 <input id="fileInput" type="file" accept=".gpx,.tcx" style="display: none;">
                 <div id="fileInfo" class="status"></div>
+                <div style="margin-top: 12px;">
+                    <label for="titleInput">赛道标题（天气卡用，可修改）</label>
+                    <input id="titleInput" type="text" maxlength="20" placeholder="输入赛道标题">
+                </div>
             </div>
 
             <div class="card card-left">
-                <h2>2. 设置时间范围</h2>
+                <h2>2. 出发与完赛</h2>
                 <div class="form-grid">
                     <div>
-                        <label for="startTime">起始时间</label>
+                        <label for="startTime">出发时间</label>
                         <input id="startTime" type="datetime-local">
                     </div>
                     <div>
-                        <div style="display: flex; justify-content: space-between; align-items: center; gap: 8px;">
-                            <label for="endTime" id="endLabel">结束时间</label>
-                            <label style="font-weight: 500; color: #4a4a4a; display: flex; align-items: center; gap: 6px;">
-                                <input type="checkbox" id="useDuration" style="transform: translateY(1px);">
-                                完赛时长
-                            </label>
+                        <label>完赛方式</label>
+                        <div class="seg">
+                            <button id="modeDurationBtn" class="seg-item on" type="button">完赛时长</button>
+                            <button id="modeTimeBtn" class="seg-item" type="button">完赛时刻</button>
                         </div>
-                        <input id="endTime" type="datetime-local">
-                        <input id="durationHours" type="number" min="0" step="0.1" placeholder="完赛时长（小时）" style="margin-top: 8px; display: none;">
+                        <input id="endTime" type="datetime-local" style="display: none;">
+                        <div id="durationBox">
+                            <input id="durationHours" type="number" min="0" step="0.1" placeholder="完赛时长（小时）">
+                            <div class="dur-presets">
+                                <button class="dur-chip" data-h="6" type="button">6h</button>
+                                <button class="dur-chip" data-h="12" type="button">12h</button>
+                                <button class="dur-chip" data-h="24" type="button">24h</button>
+                            </div>
+                        </div>
                     </div>
                 </div>
-                <div class="note">采样规则：包含 start；按整点逐小时采样；若 end 非整点则额外包含 end。</div>
+                <div class="note" id="tzNote">出发与完赛时间均按赛道当地时间填写与显示</div>
+                <div class="note">采样规则：包含起点，按整点逐小时采样，终点未到整点则补采终点。沿线位置按全程匀速估算，爬升路段实际进度可能不同。</div>
             </div>
 
             <div class="card card-left">
-                <h2>3. 生成结果</h2>
+                <h2>3. 生成与导出</h2>
                 <button id="generateBtn" class="btn" disabled>生成逐小时气象采样</button>
-                <button id="exportBtn" class="btn" style="margin-top: 10px;" disabled>导出表格 CSV</button>
-                <button id="shareBtn" class="btn" style="margin-top: 10px;" disabled>分享链接</button>
+                <div style="margin-top: 12px;">
+                    <label>导出背景</label>
+                    <div class="seg">
+                        <button id="exportLightBtn" class="seg-item on" type="button">亮色</button>
+                        <button id="exportDarkBtn" class="seg-item" type="button">暗色</button>
+                    </div>
+                </div>
+                <div class="actions" style="margin-top: 10px;">
+                    <button id="exportCardBtn" class="btn-line" disabled>导出天气卡图片</button>
+                    <button id="exportCsvBtn" class="btn-line" disabled>导出表格 CSV</button>
+                    <button id="shareBtn" class="btn-line" disabled>分享链接</button>
+                </div>
                 <div id="status" class="status"></div>
             </div>
 
             <div class="card card-right">
-                <h2>4. 绘图与结果表</h2>
-                <div class="chart-wrapper">
-                    <canvas id="weatherChart"></canvas>
+                <h2>4. 结果展示</h2>
+                <div id="resultsWrap" style="display: none;">
+                    <div>
+                        <h3>风险摘要</h3>
+                        <div id="riskWrap" style="margin-top: 10px;"></div>
+                    </div>
+
+                    <div class="sec-block">
+                        <div class="chart-head">
+                            <h3>赛道天气剖面<span class="sec-sub" id="profileSub">气温沿里程 · 蓝条为降水概率</span></h3>
+                            <button id="profileExportBtn" class="btn-mini" type="button">导出此图</button>
+                        </div>
+                        <canvas id="profileCanvas" class="chart-canvas" style="height: 320px;"></canvas>
+                        <div class="chart-hint">轻触剖面、趋势图或下方表格，查看各时点详情</div>
+                        <div id="detailPanel" class="detail" style="display: none;">
+                            <div class="detail-top">
+                                <div class="detail-emoji" id="dEmoji"></div>
+                                <div class="detail-time" id="dTime"></div>
+                                <div class="detail-weather" id="dWeather"></div>
+                            </div>
+                            <div class="detail-grid">
+                                <div class="dg"><div class="dg-k">气温</div><div class="dg-v" id="dTemp"></div></div>
+                                <div class="dg"><div class="dg-k">体感</div><div class="dg-v" id="dFeel"></div></div>
+                                <div class="dg"><div class="dg-k">降水概率</div><div class="dg-v" id="dPrecip"></div></div>
+                                <div class="dg"><div class="dg-k">风速</div><div class="dg-v" id="dWind"></div></div>
+                                <div class="dg"><div class="dg-k">风向</div><div class="dg-v" id="dWindDir"></div></div>
+                                <div class="dg"><div class="dg-k">沿线里程</div><div class="dg-v" id="dKm"></div></div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="sec-block">
+                        <div class="chart-head">
+                            <h3>温度与风速</h3>
+                            <button id="trendExportBtn" class="btn-mini" type="button">导出此图</button>
+                        </div>
+                        <canvas id="trendCanvas" class="chart-canvas" style="height: 260px;"></canvas>
+                    </div>
+
+                    <div class="sec-block">
+                        <h3>逐小时明细</h3>
+                        <div id="tableWrapper" style="margin-top: 12px; overflow-x: auto;"></div>
+                    </div>
+
+                    <div class="note">温度单位：°C，风速单位：m/s。数据来源 Open-Meteo · 预报仅供备赛参考，山野天气多变，出发前请再次确认。</div>
                 </div>
-                <div id="tableWrapper" style="margin-top: 16px; overflow-x: auto;"></div>
-                <div class="note">温度单位：°C，风速单位：m/s。</div>
             </div>
         </div>
     </div>
@@ -246,24 +527,119 @@
         const uploadArea = document.getElementById("uploadArea")
         const fileInput = document.getElementById("fileInput")
         const fileInfo = document.getElementById("fileInfo")
+        const titleInput = document.getElementById("titleInput")
         const startTimeInput = document.getElementById("startTime")
         const endTimeInput = document.getElementById("endTime")
-        const useDurationInput = document.getElementById("useDuration")
+        const modeDurationBtn = document.getElementById("modeDurationBtn")
+        const modeTimeBtn = document.getElementById("modeTimeBtn")
+        const durationBox = document.getElementById("durationBox")
         const durationHoursInput = document.getElementById("durationHours")
-        const endLabel = document.getElementById("endLabel")
+        const durChips = Array.from(document.querySelectorAll(".dur-chip"))
+        const tzNote = document.getElementById("tzNote")
         const generateBtn = document.getElementById("generateBtn")
-        const exportBtn = document.getElementById("exportBtn")
+        const exportCardBtn = document.getElementById("exportCardBtn")
+        const exportLightBtn = document.getElementById("exportLightBtn")
+        const exportDarkBtn = document.getElementById("exportDarkBtn")
+        const exportCsvBtn = document.getElementById("exportCsvBtn")
         const shareBtn = document.getElementById("shareBtn")
         const statusEl = document.getElementById("status")
+        const resultsWrap = document.getElementById("resultsWrap")
+        const riskWrap = document.getElementById("riskWrap")
+        const profileCanvas = document.getElementById("profileCanvas")
+        const trendCanvas = document.getElementById("trendCanvas")
+        const profileExportBtn = document.getElementById("profileExportBtn")
+        const trendExportBtn = document.getElementById("trendExportBtn")
+        const profileSub = document.getElementById("profileSub")
+        const detailPanel = document.getElementById("detailPanel")
+        const dEmoji = document.getElementById("dEmoji")
+        const dTime = document.getElementById("dTime")
+        const dWeather = document.getElementById("dWeather")
+        const dTemp = document.getElementById("dTemp")
+        const dFeel = document.getElementById("dFeel")
+        const dPrecip = document.getElementById("dPrecip")
+        const dWind = document.getElementById("dWind")
+        const dWindDir = document.getElementById("dWindDir")
+        const dKm = document.getElementById("dKm")
         const tableWrapper = document.getElementById("tableWrapper")
-        const weatherChartCanvas = document.getElementById("weatherChart")
 
         let gpxData = null
-        let chartInstance = null
         let lastSamples = []
+        let displaySamples = []
+        let riskItems = []
         let gpxFileName = "gpx"
         let lastRange = { start: null, end: null }
         let isSharedData = false
+        let useDuration = true
+        let offsetSec = null
+        let tzName = ""
+        let generatedAt = null
+        let selectedIndex = -1
+        let resizeTimer = null
+        let exportTheme = "light"
+
+        const MONO = "Menlo, Consolas, monospace"
+        const SANS = '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif'
+
+        const PALETTE_LIGHT = {
+            ink: "#2b3038",
+            inkDim: "#8a94a0",
+            grid: "rgba(43,48,56,0.10)",
+            accent: "#ff6a2b",
+            moss: "#7fb069",
+            temp: "#2e7cf6",
+            tempFillTop: "rgba(46,124,246,0.16)",
+            tempFillBottom: "rgba(46,124,246,0)",
+            rain: "rgba(79,172,254,0.55)",
+            wind: "rgba(138,148,160,0.35)",
+            zeroLine: "rgba(43,48,56,0.18)"
+        }
+
+        const PALETTE_DARK = {
+            ink: "#e9ede5",
+            inkDim: "#93a198",
+            grid: "rgba(147,161,152,0.12)",
+            accent: "#ff6a2b",
+            moss: "#7fb069",
+            temp: "#e9ede5",
+            tempFillTop: "rgba(127,176,105,0.22)",
+            tempFillBottom: "rgba(127,176,105,0)",
+            rain: "rgba(111,168,220,0.6)",
+            wind: "rgba(147,161,152,0.4)",
+            zeroLine: "rgba(233,237,229,0.22)"
+        }
+
+        const CARD_THEMES = {
+            light: {
+                bg: "#ffffff",
+                ink: "#1f2937",
+                dim: "#6b7280",
+                accent: "#ff6a2b",
+                hair: "rgba(31,41,55,0.12)",
+                zebra: "rgba(31,41,55,0.045)",
+                ring: "rgba(79,172,254,0.08)",
+                ok: "#7fb069",
+                cold: "#2563eb",
+                palette: PALETTE_LIGHT
+            },
+            dark: {
+                bg: "#0e1410",
+                ink: "#e9ede5",
+                dim: "#93a198",
+                accent: "#ff6a2b",
+                hair: "rgba(147,161,152,0.18)",
+                zebra: "rgba(147,161,152,0.06)",
+                ring: "rgba(147,161,152,0.10)",
+                ok: "#7fb069",
+                cold: "#8ab4ff",
+                palette: PALETTE_DARK
+            }
+        }
+
+        const CARD_W = 1000
+        const CARD_MAX_PX = 8000
+        const ML = 80
+        const MR = 80
+        const CONTENT_W = CARD_W - ML - MR
 
         const weatherCodeMap = {
             0: "晴朗",
@@ -296,6 +672,22 @@
             99: "雷暴伴大冰雹"
         }
 
+        function weatherEmoji(code) {
+            if (code === 0) return "☀️"
+            if (code === 1) return "🌤️"
+            if (code === 2) return "⛅"
+            if (code === 3) return "☁️"
+            if (code === 45 || code === 48) return "🌫️"
+            if (code >= 51 && code <= 55) return "🌦️"
+            if (code >= 56 && code <= 67) return "🌧️"
+            if (code >= 71 && code <= 77) return "🌨️"
+            if (code === 80) return "🌦️"
+            if (code === 81 || code === 82) return "🌧️"
+            if (code === 85 || code === 86) return "🌨️"
+            if (code >= 95) return "⛈️"
+            return "🌡️"
+        }
+
         const weatherCache = new Map()
         const weatherFetchCooldownMs = 10000
         let lastWeatherFetchStartedAt = 0
@@ -312,14 +704,46 @@
             return false
         }
 
+        function pad2(value) {
+            return String(value).padStart(2, "0")
+        }
+
+        function dateStr(date) {
+            return date.getFullYear() + "-" + pad2(date.getMonth() + 1) + "-" + pad2(date.getDate())
+        }
+
+        function dateStrUtc(ms) {
+            const d = new Date(ms)
+            return d.getUTCFullYear() + "-" + pad2(d.getUTCMonth() + 1) + "-" + pad2(d.getUTCDate())
+        }
+
+        function formatDateTime(date) {
+            return (
+                date.getFullYear() + "-" + pad2(date.getMonth() + 1) + "-" + pad2(date.getDate()) +
+                " " + pad2(date.getHours()) + ":" + pad2(date.getMinutes())
+            )
+        }
+
+        function formatUtcOffset(offset) {
+            const sign = offset >= 0 ? "+" : "-"
+            const abs = Math.abs(offset || 0)
+            const h = Math.floor(abs / 3600)
+            const m = Math.round((abs % 3600) / 60)
+            return "UTC" + sign + h + (m ? ":" + pad2(m) : "")
+        }
+
+        function tzLabel() {
+            if (!Number.isFinite(offsetSec)) return "—"
+            return tzName ? tzName + " (" + formatUtcOffset(offsetSec) + ")" : formatUtcOffset(offsetSec)
+        }
+
+        function browserOffsetSec() {
+            return -new Date().getTimezoneOffset() * 60
+        }
+
         function toLocalDatetimeValue(date) {
             const offset = date.getTimezoneOffset() * 60000
             return new Date(date.getTime() - offset).toISOString().slice(0, 16)
-        }
-
-        function toLocalDateString(date) {
-            const offset = date.getTimezoneOffset() * 60000
-            return new Date(date.getTime() - offset).toISOString().slice(0, 10)
         }
 
         function nextFullHour(date = new Date()) {
@@ -327,6 +751,76 @@
             next.setMinutes(0, 0, 0)
             next.setHours(next.getHours() + 1)
             return next
+        }
+
+        function courseWallToInstant(value, offset) {
+            const parts = value.split("T")
+            const dateParts = parts[0].split("-")
+            const timeParts = parts[1].split(":")
+            const wallMs = Date.UTC(
+                Number(dateParts[0]),
+                Number(dateParts[1]) - 1,
+                Number(dateParts[2]),
+                Number(timeParts[0]),
+                Number(timeParts[1] || 0)
+            )
+            return wallMs - (offset || 0) * 1000
+        }
+
+        function instantToCourseWall(ms, offset) {
+            const d = new Date(ms + (offset || 0) * 1000)
+            return {
+                date: d.getUTCFullYear() + "-" + pad2(d.getUTCMonth() + 1) + "-" + pad2(d.getUTCDate()),
+                time: pad2(d.getUTCHours()) + ":" + pad2(d.getUTCMinutes())
+            }
+        }
+
+        function courseLocalTimeStr(ms, offset) {
+            return new Date(ms + (offset || 0) * 1000).toISOString().slice(0, 13) + ":00"
+        }
+
+        function formatCourseLabel(ms, offset, withDate) {
+            const d = new Date(ms + (offset || 0) * 1000)
+            const hm = pad2(d.getUTCHours()) + ":" + pad2(d.getUTCMinutes())
+            if (withDate) return pad2(d.getUTCMonth() + 1) + "-" + pad2(d.getUTCDate()) + " " + hm
+            return hm
+        }
+
+        function courseDayLabel(ms, offset) {
+            const d = new Date(ms + (offset || 0) * 1000)
+            return pad2(d.getUTCMonth() + 1) + "-" + pad2(d.getUTCDate())
+        }
+
+        function formatFileTime(date) {
+            const d = new Date(date.getTime() + (offsetSec || 0) * 1000)
+            return `${d.getUTCFullYear()}${pad2(d.getUTCMonth() + 1)}${pad2(d.getUTCDate())}-${pad2(d.getUTCHours())}${pad2(d.getUTCMinutes())}`
+        }
+
+        function haversine(a, b) {
+            const R = 6371000
+            const toRad = v => v * Math.PI / 180
+            const dLat = toRad(b.lat - a.lat)
+            const dLon = toRad(b.lon - a.lon)
+            const lat1 = toRad(a.lat)
+            const lat2 = toRad(b.lat)
+            const sin1 = Math.sin(dLat / 2)
+            const sin2 = Math.sin(dLon / 2)
+            const h = sin1 * sin1 + Math.cos(lat1) * Math.cos(lat2) * sin2 * sin2
+            const c = 2 * Math.atan2(Math.sqrt(h), Math.sqrt(1 - h))
+            return R * c
+        }
+
+        function buildTrack(points) {
+            if (points.length < 2) {
+                return null
+            }
+            const distances = [0]
+            let total = 0
+            for (let i = 1; i < points.length; i++) {
+                total += haversine(points[i - 1], points[i])
+                distances.push(total)
+            }
+            return { points, distances, totalDistance: total }
         }
 
         function parseGpx(text) {
@@ -339,7 +833,6 @@
             if (points.length === 0) {
                 return null
             }
-
             const result = []
             for (const pt of points) {
                 const lat = parseFloat(pt.getAttribute("lat"))
@@ -347,26 +840,10 @@
                 const timeNode = pt.getElementsByTagName("time")[0]
                 const time = timeNode ? new Date(timeNode.textContent) : null
                 if (Number.isFinite(lat) && Number.isFinite(lon)) {
-                    result.push({ lat, lon, time })
+                    result.push({ lat, lon, time: time && !Number.isNaN(time.getTime()) ? time : null })
                 }
             }
-
-            if (result.length < 2) {
-                return null
-            }
-
-            const distances = [0]
-            let total = 0
-            for (let i = 1; i < result.length; i++) {
-                total += haversine(result[i - 1], result[i])
-                distances.push(total)
-            }
-
-            return {
-                points: result,
-                distances,
-                totalDistance: total
-            }
+            return buildTrack(result)
         }
 
         function parseTcx(text) {
@@ -389,61 +866,10 @@
                 const lon = lonNode ? parseFloat(lonNode.textContent) : NaN
                 const time = timeNode ? new Date(timeNode.textContent) : null
                 if (Number.isFinite(lat) && Number.isFinite(lon)) {
-                    result.push({ lat, lon, time })
+                    result.push({ lat, lon, time: time && !Number.isNaN(time.getTime()) ? time : null })
                 }
             }
-            if (result.length < 2) {
-                return null
-            }
-            const distances = [0]
-            let total = 0
-            for (let i = 1; i < result.length; i++) {
-                total += haversine(result[i - 1], result[i])
-                distances.push(total)
-            }
-            return {
-                points: result,
-                distances,
-                totalDistance: total
-            }
-        }
-
-        function haversine(a, b) {
-            const R = 6371000
-            const toRad = v => v * Math.PI / 180
-            const dLat = toRad(b.lat - a.lat)
-            const dLon = toRad(b.lon - a.lon)
-            const lat1 = toRad(a.lat)
-            const lat2 = toRad(b.lat)
-            const sin1 = Math.sin(dLat / 2)
-            const sin2 = Math.sin(dLon / 2)
-            const h = sin1 * sin1 + Math.cos(lat1) * Math.cos(lat2) * sin2 * sin2
-            const c = 2 * Math.atan2(Math.sqrt(h), Math.sqrt(1 - h))
-            return R * c
-        }
-
-        function generateSampleTimes(start, end) {
-            const times = [new Date(start)]
-            const startCopy = new Date(start)
-            const nextHour = new Date(startCopy)
-            nextHour.setMinutes(0, 0, 0)
-            if (startCopy.getMinutes() !== 0 || startCopy.getSeconds() !== 0 || startCopy.getMilliseconds() !== 0) {
-                nextHour.setHours(nextHour.getHours() + 1)
-            } else {
-                nextHour.setHours(nextHour.getHours() + 1)
-            }
-
-            let cursor = nextHour
-            while (cursor.getTime() <= end.getTime()) {
-                times.push(new Date(cursor))
-                cursor = new Date(cursor.getTime() + 3600000)
-            }
-
-            const last = times[times.length - 1]
-            if (last.getTime() !== end.getTime()) {
-                times.push(new Date(end))
-            }
-            return times
+            return buildTrack(result)
         }
 
         function interpolateByDistance(gpx, targetDistance, startIndex) {
@@ -468,6 +894,22 @@
             return Math.round(value * factor) / factor
         }
 
+        function generateSampleTimes(start, end) {
+            const times = [new Date(start)]
+            const cursor = new Date(start)
+            cursor.setMinutes(0, 0, 0)
+            cursor.setHours(cursor.getHours() + 1)
+            while (cursor.getTime() <= end.getTime()) {
+                times.push(new Date(cursor))
+                cursor.setTime(cursor.getTime() + 3600000)
+            }
+            const last = times[times.length - 1]
+            if (last.getTime() !== end.getTime()) {
+                times.push(new Date(end))
+            }
+            return times
+        }
+
         const HISTORICAL_DAYS_THRESHOLD = 90
         const ARCHIVE_API_BASE = "https://archive-api.open-meteo.com/v1/archive"
         const FORECAST_API_BASE = "https://api.open-meteo.com/v1/forecast"
@@ -489,7 +931,7 @@
             const url = new URL(apiBase)
             url.searchParams.set("latitude", lat)
             url.searchParams.set("longitude", lon)
-            url.searchParams.set("hourly", "weathercode,temperature_2m,apparent_temperature,windspeed_10m,winddirection_10m")
+            url.searchParams.set("hourly", "weathercode,temperature_2m,apparent_temperature,windspeed_10m,winddirection_10m,precipitation_probability")
             url.searchParams.set("wind_speed_unit", "ms")
             url.searchParams.set("timezone", "auto")
             url.searchParams.set("start_date", startDate)
@@ -511,17 +953,25 @@
             return data
         }
 
-        function closestHourIndex(times, target) {
+        function closestHourIndex(times, targetMs) {
             let closestIndex = 0
             let closestDiff = Infinity
             for (let i = 0; i < times.length; i++) {
-                const diff = Math.abs(new Date(times[i]).getTime() - target.getTime())
+                const parsed = Date.parse(times[i].replace(" ", "T"))
+                const diff = Math.abs(parsed - targetMs)
                 if (diff < closestDiff) {
                     closestDiff = diff
                     closestIndex = i
                 }
             }
             return closestIndex
+        }
+
+        function matchHourIndex(times, timeMs, offset) {
+            const key = courseLocalTimeStr(timeMs, offset)
+            const exact = times.indexOf(key)
+            if (exact >= 0) return exact
+            return closestHourIndex(times, new Date(key).getTime())
         }
 
         function windDirectionText(deg) {
@@ -550,87 +1000,819 @@
             return directions[index]
         }
 
-        function renderChart(samples) {
-            const labels = samples.map(item => item.timeLabel)
-            const temperature = samples.map(item => item.temperature)
-            const apparentTemperature = samples.map(item => item.apparentTemperature)
-            const weatherText = samples.map(item => item.weather)
-
-            if (chartInstance) {
-                chartInstance.destroy()
-            }
-
-            chartInstance = new Chart(weatherChartCanvas.getContext("2d"), {
-                type: "line",
-                data: {
-                    labels,
-                    datasets: [
-                        {
-                            label: "气温 (°C)",
-                            data: temperature,
-                            borderColor: "#ffb347",
-                            backgroundColor: "rgba(255, 179, 71, 0.2)",
-                            tension: 0.3,
-                            yAxisID: "yTemp"
-                        },
-                        {
-                            label: "体感温度 (°C)",
-                            data: apparentTemperature,
-                            borderColor: "#4facfe",
-                            backgroundColor: "rgba(79, 172, 254, 0.2)",
-                            tension: 0.3,
-                            yAxisID: "yTemp"
-                        }
-                    ]
-                },
-                options: {
-                    responsive: true,
-                    interaction: {
-                        mode: "index",
-                        intersect: false
-                    },
-                    scales: {
-                        yTemp: {
-                            position: "left",
-                            title: {
-                                display: true,
-                                text: "温度 (°C)"
-                            }
-                        }
-                    },
-                    plugins: {
-                        tooltip: {
-                            callbacks: {
-                                afterBody: context => {
-                                    const index = context[0].dataIndex
-                                    return `天气: ${weatherText[index]}`
-                                }
-                            }
-                        }
-                    }
+        function analyzeRiskEntries(samples) {
+            const entries = []
+            for (const s of samples) {
+                const tags = []
+                if (s.weatherCode >= 95) tags.push("雷暴")
+                if (s.windSpeed >= 10) tags.push("风速 " + s.windSpeed.toFixed(0) + "m/s")
+                if (s.temperature <= 0) tags.push("低温 " + s.temperature.toFixed(0) + "°C")
+                if (s.apparentTemperature <= 5) tags.push("体感 " + s.apparentTemperature.toFixed(0) + "°C")
+                if (s.precipProb >= 60) tags.push("降水概率 " + s.precipProb.toFixed(0) + "%")
+                if (tags.length) {
+                    entries.push({ sample: s, label: s.shortLabel, text: tags.join(" · "), tags })
                 }
-            })
+            }
+            return entries
         }
 
-        function renderTable(samples) {
-            if (samples.length === 0) {
+        function analyzeRisks(samples) {
+            return analyzeRiskEntries(samples).map(e => ({ label: e.label, text: e.text }))
+        }
+
+        function probeOffset(track) {
+            if (Number.isFinite(track.utcOffsetSec)) {
+                return Promise.resolve(track.utcOffsetSec)
+            }
+            if (track._offsetPromise) {
+                return track._offsetPromise
+            }
+            const mid = track.points[Math.floor(track.points.length / 2)]
+            const now = Date.now()
+            track._offsetPromise = fetchWeather(mid.lat, mid.lon, dateStr(new Date(now - 86400000)), dateStr(new Date(now + 86400000)))
+                .then(data => {
+                    const offset = Number.isFinite(data.utc_offset_seconds) ? data.utc_offset_seconds : browserOffsetSec()
+                    track.utcOffsetSec = offset
+                    track.tzName = data.timezone || ""
+                    return offset
+                })
+            return track._offsetPromise
+        }
+
+        function niceStep(range, target) {
+            const raw = range / target
+            const mag = Math.pow(10, Math.floor(Math.log10(raw)))
+            const norm = raw / mag
+            const step = norm < 1.5 ? 1 : norm < 3 ? 2 : norm < 7 ? 5 : 10
+            return step * mag
+        }
+
+        function roundedRect(ctx, x, y, w, h, r) {
+            const radius = Math.min(r, w / 2, h / 2)
+            ctx.beginPath()
+            ctx.moveTo(x + radius, y)
+            ctx.arcTo(x + w, y, x + w, y + h, radius)
+            ctx.arcTo(x + w, y + h, x, y + h, radius)
+            ctx.arcTo(x, y + h, x, y, radius)
+            ctx.arcTo(x, y, x + w, y, radius)
+            ctx.closePath()
+        }
+
+        function tempRange(samples) {
+            const values = []
+            for (const s of samples) {
+                if (Number.isFinite(s.temperature)) values.push(s.temperature)
+                if (Number.isFinite(s.apparentTemperature)) values.push(s.apparentTemperature)
+            }
+            if (!values.length) return { min: 0, max: 10 }
+            let min = Math.floor(Math.min.apply(null, values) - 2)
+            let max = Math.ceil(Math.max.apply(null, values) + 2)
+            if (max - min < 8) {
+                const mid = (min + max) / 2
+                min = mid - 4
+                max = mid + 4
+            }
+            return { min, max }
+        }
+
+        function tracePath(ctx, xs, ys) {
+            let started = false
+            for (let i = 0; i < xs.length; i++) {
+                if (!Number.isFinite(ys[i])) {
+                    started = false
+                    continue
+                }
+                if (!started) {
+                    ctx.moveTo(xs[i], ys[i])
+                    started = true
+                    continue
+                }
+                const prevX = xs[i - 1]
+                const prevY = ys[i - 1]
+                if (Number.isFinite(prevY)) {
+                    const midX = (prevX + xs[i]) / 2
+                    ctx.quadraticCurveTo(prevX, prevY, midX, (prevY + ys[i]) / 2)
+                    ctx.lineTo(xs[i], ys[i])
+                } else {
+                    ctx.moveTo(xs[i], ys[i])
+                }
+            }
+        }
+
+        function drawProfile(ctx, rect, samples, opts) {
+            const options = opts || {}
+            const selected = options.selectedIndex >= 0 ? options.selectedIndex : -1
+            const pal = options.palette || PALETTE_LIGHT
+            const n = samples.length
+            if (!n) return
+
+            const padTop = 58
+            const padLeft = 42
+            const padRight = 14
+            const padBottom = 24
+            const plotW = rect.w - padLeft - padRight
+            const plotH = rect.h - padTop - padBottom
+            if (plotW <= 10 || plotH <= 10) return
+
+            ctx.save()
+            ctx.translate(rect.x, rect.y)
+            ctx.clearRect(0, 0, rect.w, rect.h)
+            ctx.font = "9px " + MONO
+            ctx.textAlign = "center"
+            ctx.textBaseline = "alphabetic"
+
+            const xMax = Math.max(samples[n - 1].distanceKm, 1)
+            const x = d => padLeft + (d / xMax) * plotW
+            const range = tempRange(samples)
+            const y = t => padTop + ((range.max - t) / (range.max - range.min)) * plotH
+
+            const tStep = niceStep(range.max - range.min, 4)
+            ctx.strokeStyle = pal.grid
+            ctx.fillStyle = pal.inkDim
+            ctx.lineWidth = 1
+            ctx.textAlign = "right"
+            ctx.textBaseline = "middle"
+            for (let t = Math.ceil(range.min / tStep) * tStep; t <= range.max; t += tStep) {
+                const py = y(t)
+                ctx.beginPath()
+                ctx.moveTo(padLeft, py)
+                ctx.lineTo(rect.w - padRight, py)
+                ctx.stroke()
+                ctx.fillText(t + "°", padLeft - 6, py)
+            }
+            ctx.textAlign = "center"
+
+            if (range.min < 0 && range.max > 0) {
+                const py = y(0)
+                ctx.save()
+                ctx.strokeStyle = pal.zeroLine
+                ctx.setLineDash([4, 4])
+                ctx.beginPath()
+                ctx.moveTo(padLeft, py)
+                ctx.lineTo(rect.w - padRight, py)
+                ctx.stroke()
+                ctx.restore()
+                ctx.fillStyle = pal.inkDim
+                ctx.textAlign = "left"
+                ctx.fillText("0°C", rect.w - padRight - 24, py - 6)
+                ctx.textAlign = "center"
+            }
+
+            const kmStep = niceStep(xMax, 4)
+            ctx.strokeStyle = pal.grid
+            ctx.fillStyle = pal.inkDim
+            ctx.textBaseline = "alphabetic"
+            for (let k = kmStep; k < xMax; k += kmStep) {
+                const px = x(k)
+                ctx.beginPath()
+                ctx.moveTo(px, padTop)
+                ctx.lineTo(px, rect.h - padBottom)
+                ctx.stroke()
+                ctx.fillText(k + "km", px, rect.h - 8)
+            }
+
+            const barW = 6
+            for (let i = 0; i < n; i++) {
+                const s = samples[i]
+                if (!Number.isFinite(s.precipProb) || s.precipProb <= 0) continue
+                const bh = (s.precipProb / 100) * 18
+                ctx.fillStyle = pal.rain
+                roundedRect(ctx, x(s.distanceKm) - barW / 2, padTop - 20 + (18 - bh), barW, bh, 2)
+                ctx.fill()
+            }
+
+            const xs = samples.map(s => x(s.distanceKm))
+            const ys = samples.map(s => (Number.isFinite(s.temperature) ? y(s.temperature) : NaN))
+
+            const grad = ctx.createLinearGradient(0, padTop, 0, rect.h - padBottom)
+            grad.addColorStop(0, pal.tempFillTop)
+            grad.addColorStop(1, pal.tempFillBottom)
+            ctx.beginPath()
+            tracePath(ctx, xs, ys)
+            ctx.lineTo(xs[n - 1], rect.h - padBottom)
+            ctx.lineTo(xs[0], rect.h - padBottom)
+            ctx.closePath()
+            ctx.fillStyle = grad
+            ctx.fill()
+
+            ctx.beginPath()
+            tracePath(ctx, xs, ys)
+            ctx.strokeStyle = pal.temp
+            ctx.lineWidth = 2
+            ctx.lineJoin = "round"
+            ctx.stroke()
+
+            const labelStep = Math.max(1, Math.ceil(n / 9))
+            ctx.textBaseline = "alphabetic"
+            for (let i = 0; i < n; i++) {
+                const s = samples[i]
+                const px = xs[i]
+                const isSelected = i === selected
+                const showLabel = isSelected || i % labelStep === 0
+                if (showLabel) {
+                    ctx.font = (isSelected ? "bold 10px " : "9px ") + MONO
+                    ctx.fillStyle = isSelected ? pal.accent : pal.inkDim
+                    ctx.fillText(s.shortLabel, px, 14)
+                }
+                if (isSelected || i % labelStep === 0) {
+                    ctx.font = isSelected ? "15px " + MONO : "12px " + MONO
+                    ctx.fillText(s.emoji, px, 30)
+                }
+                if (isSelected) {
+                    ctx.save()
+                    ctx.strokeStyle = pal.accent
+                    ctx.setLineDash([3, 3])
+                    ctx.beginPath()
+                    ctx.moveTo(px, padTop)
+                    ctx.lineTo(px, rect.h - padBottom)
+                    ctx.stroke()
+                    ctx.restore()
+                }
+            }
+
+            for (let i = 0; i < n; i++) {
+                if (!Number.isFinite(ys[i])) continue
+                ctx.beginPath()
+                ctx.arc(xs[i], ys[i], i === selected ? 4.5 : 2.5, 0, Math.PI * 2)
+                ctx.fillStyle = i === selected ? pal.accent : pal.inkDim
+                ctx.fill()
+                if (i === selected) {
+                    ctx.strokeStyle = pal.ink
+                    ctx.lineWidth = 1.5
+                    ctx.stroke()
+                }
+            }
+
+            ctx.restore()
+        }
+
+        function drawTrend(ctx, rect, samples, opts) {
+            const options = opts || {}
+            const selected = options.selectedIndex >= 0 ? options.selectedIndex : -1
+            const pal = options.palette || PALETTE_LIGHT
+            const n = samples.length
+            if (!n) return
+
+            const padTop = 18
+            const padLeft = 40
+            const padRight = 38
+            const padBottom = 26
+            const plotW = rect.w - padLeft - padRight
+            const plotH = rect.h - padTop - padBottom
+            if (plotW <= 10 || plotH <= 10) return
+
+            ctx.save()
+            ctx.translate(rect.x, rect.y)
+            ctx.clearRect(0, 0, rect.w, rect.h)
+
+            const t0 = samples[0].timeMs
+            const tN = samples[n - 1].timeMs
+            const span = Math.max(tN - t0, 1)
+            const px = s => padLeft + ((s.timeMs - t0) / span) * plotW
+
+            const range = tempRange(samples)
+            const py = t => padTop + ((range.max - t) / (range.max - range.min)) * plotH
+
+            let windMax = 1
+            for (const s of samples) {
+                if (Number.isFinite(s.windSpeed)) windMax = Math.max(windMax, s.windSpeed)
+            }
+            windMax = Math.ceil(windMax * 1.2)
+
+            const tStep = niceStep(range.max - range.min, 4)
+            ctx.strokeStyle = pal.grid
+            ctx.fillStyle = pal.inkDim
+            ctx.lineWidth = 1
+            ctx.font = "9px " + MONO
+            ctx.textAlign = "right"
+            ctx.textBaseline = "middle"
+            for (let t = Math.ceil(range.min / tStep) * tStep; t <= range.max; t += tStep) {
+                const y0 = py(t)
+                ctx.beginPath()
+                ctx.moveTo(padLeft, y0)
+                ctx.lineTo(rect.w - padRight, y0)
+                ctx.stroke()
+                ctx.fillText(t + "°", padLeft - 6, y0)
+            }
+            const wTicks = 3
+            for (let i = 0; i <= wTicks; i++) {
+                const v = (windMax / wTicks) * i
+                ctx.textAlign = "left"
+                ctx.fillText(v.toFixed(0), rect.w - padRight + 6, padTop + plotH - (plotH / wTicks) * i)
+                ctx.textAlign = "right"
+            }
+
+            const barW = Math.min(10, (plotW / n) * 0.55)
+            ctx.fillStyle = pal.wind
+            for (const s of samples) {
+                if (!Number.isFinite(s.windSpeed)) continue
+                const bh = (s.windSpeed / windMax) * plotH
+                ctx.fillRect(px(s) - barW / 2, padTop + plotH - bh, barW, bh)
+            }
+
+            ctx.beginPath()
+            tracePath(
+                ctx,
+                samples.map(s => px(s)),
+                samples.map(s => (Number.isFinite(s.apparentTemperature) ? py(s.apparentTemperature) : NaN))
+            )
+            ctx.strokeStyle = pal.moss
+            ctx.lineWidth = 1.5
+            ctx.setLineDash([4, 4])
+            ctx.lineJoin = "round"
+            ctx.stroke()
+            ctx.setLineDash([])
+
+            ctx.beginPath()
+            tracePath(
+                ctx,
+                samples.map(s => px(s)),
+                samples.map(s => (Number.isFinite(s.temperature) ? py(s.temperature) : NaN))
+            )
+            ctx.strokeStyle = pal.ink
+            ctx.lineWidth = 2
+            ctx.stroke()
+
+            if (selected >= 0 && selected < n) {
+                const s = samples[selected]
+                const x0 = px(s)
+                ctx.save()
+                ctx.strokeStyle = pal.accent
+                ctx.setLineDash([3, 3])
+                ctx.beginPath()
+                ctx.moveTo(x0, padTop)
+                ctx.lineTo(x0, padTop + plotH)
+                ctx.stroke()
+                ctx.restore()
+                ctx.beginPath()
+                ctx.arc(x0, py(s.temperature), 4.5, 0, Math.PI * 2)
+                ctx.fillStyle = pal.accent
+                ctx.fill()
+                ctx.strokeStyle = pal.ink
+                ctx.lineWidth = 1.5
+                ctx.stroke()
+            }
+
+            const labelStep = Math.max(1, Math.ceil(n / 8))
+            ctx.fillStyle = pal.inkDim
+            ctx.font = "9px " + MONO
+            ctx.textAlign = "center"
+            ctx.textBaseline = "alphabetic"
+            for (let i = 0; i < n; i += labelStep) {
+                ctx.fillText(samples[i].shortLabel, px(samples[i]), rect.h - 8)
+            }
+
+            const legendY = 10
+            ctx.textAlign = "left"
+            ctx.textBaseline = "middle"
+            ctx.strokeStyle = pal.ink
+            ctx.lineWidth = 2
+            ctx.beginPath()
+            ctx.moveTo(padLeft, legendY)
+            ctx.lineTo(padLeft + 12, legendY)
+            ctx.stroke()
+            ctx.fillStyle = pal.ink
+            ctx.fillText("气温", padLeft + 18, legendY)
+            ctx.strokeStyle = pal.moss
+            ctx.lineWidth = 1.5
+            ctx.setLineDash([3, 3])
+            ctx.beginPath()
+            ctx.moveTo(padLeft + 52, legendY)
+            ctx.lineTo(padLeft + 64, legendY)
+            ctx.stroke()
+            ctx.setLineDash([])
+            ctx.fillStyle = pal.moss
+            ctx.fillText("体感", padLeft + 70, legendY)
+            ctx.fillStyle = pal.wind
+            ctx.fillRect(padLeft + 104, legendY - 4, 12, 8)
+            ctx.fillStyle = pal.inkDim
+            ctx.fillText("风速", padLeft + 122, legendY)
+
+            ctx.restore()
+        }
+
+        function profileHitIndex(cssX, rect, samples) {
+            const n = samples.length
+            if (!n) return -1
+            const padLeft = 42
+            const padRight = 14
+            const plotW = rect.w - padLeft - padRight
+            if (plotW <= 10) return -1
+            const xMax = Math.max(samples[n - 1].distanceKm, 1)
+            const d = ((cssX - padLeft) / plotW) * xMax
+            let best = 0
+            let bestDiff = Infinity
+            for (let i = 0; i < n; i++) {
+                const diff = Math.abs(samples[i].distanceKm - d)
+                if (diff < bestDiff) {
+                    bestDiff = diff
+                    best = i
+                }
+            }
+            return best
+        }
+
+        function trendHitIndex(cssX, rect, samples) {
+            const n = samples.length
+            if (!n) return -1
+            const padLeft = 40
+            const padRight = 38
+            const plotW = rect.w - padLeft - padRight
+            if (plotW <= 10) return -1
+            const t0 = samples[0].timeMs
+            const span = Math.max(samples[n - 1].timeMs - t0, 1)
+            const t = t0 + ((cssX - padLeft) / plotW) * span
+            let best = 0
+            let bestDiff = Infinity
+            for (let i = 0; i < n; i++) {
+                const diff = Math.abs(samples[i].timeMs - t)
+                if (diff < bestDiff) {
+                    bestDiff = diff
+                    best = i
+                }
+            }
+            return best
+        }
+
+        function truncate(str, max) {
+            if (!str) return "未命名赛道"
+            return str.length > max ? str.slice(0, max) + "…" : str
+        }
+
+        function truncateWeather(str) {
+            if (!str) return ""
+            return str.length > 8 ? str.slice(0, 7) + "…" : str
+        }
+
+        function truncateRisk(text) {
+            if (!text) return ""
+            return text.length > 24 ? text.slice(0, 23) + "…" : text
+        }
+
+        function riskEmoji(tags) {
+            if (tags.indexOf("雷暴") >= 0) return "⛈️"
+            if (tags.some(t => t.indexOf("低温") === 0)) return "❄️"
+            if (tags.some(t => t.indexOf("体感") === 0)) return "🧊"
+            if (tags.some(t => t.indexOf("降水") === 0)) return "🌧️"
+            if (tags.some(t => t.indexOf("风速") === 0)) return "💨"
+            return "⚠️"
+        }
+
+        const COLS = {
+            time: 80,
+            weather: 190,
+            weatherText: 230,
+            temp: 470,
+            feel: 560,
+            precip: 640,
+            wind: 740,
+            km: 920
+        }
+
+        function layoutCard(samples) {
+            const risks = analyzeRiskEntries(samples)
+            const risksStartY = 728
+            const risksEndY = risksStartY + (risks.length ? risks.length * 56 : 48) + 14
+            const tableTitleY = risksEndY + 36
+            const tableHeaderY = tableTitleY + 42
+            const rowsStartY = tableHeaderY + 30
+            const rowH = 44
+            let dateExtra = 0
+            let lastDay = ""
+            for (const s of samples) {
+                const label = s.timeLabel || ""
+                const day = label.length > 5 ? label.split(" ")[0] : ""
+                if (day && day !== lastDay) {
+                    lastDay = day
+                    dateExtra += 32
+                }
+            }
+            const H = rowsStartY + samples.length * rowH + dateExtra + 170
+            return { risks, tableTitleY, tableHeaderY, rowsStartY, rowH, H }
+        }
+
+        function weatherCardHeight(samples) {
+            return layoutCard(samples).H
+        }
+
+        function drawCardRings(ctx, ringColor) {
+            ctx.save()
+            ctx.strokeStyle = ringColor
+            ctx.lineWidth = 2
+            const rings = [
+                [120, 20, 380, 150, -0.3],
+                [60, 130, 280, 110, -0.15],
+                [200, 190, 200, 85, 0.2],
+                [-40, 280, 220, 95, 0.1]
+            ]
+            for (const ring of rings) {
+                ctx.beginPath()
+                ctx.ellipse(ring[0], ring[1], ring[2], ring[3], ring[4], 0, Math.PI * 2)
+                ctx.stroke()
+            }
+            ctx.restore()
+        }
+
+        function drawWeatherCard(ctx, samples, meta, themeName) {
+            const T = CARD_THEMES[themeName] || CARD_THEMES.light
+            const INK = T.ink
+            const DIM = T.dim
+            const ACCENT = T.accent
+            const HAIR = T.hair
+            const ZEBRA = T.zebra
+
+            const layout = layoutCard(samples)
+            const H = layout.H
+            ctx.save()
+            ctx.fillStyle = T.bg
+            ctx.fillRect(0, 0, CARD_W, H)
+            drawCardRings(ctx, T.ring)
+
+            ctx.fillStyle = DIM
+            ctx.font = "22px " + SANS
+            ctx.textAlign = "left"
+            ctx.textBaseline = "alphabetic"
+            ctx.fillText("TRAIL WEATHER · 赛道气象", ML, 100)
+
+            ctx.fillStyle = INK
+            ctx.font = "bold 48px " + SANS
+            ctx.fillText(truncate(meta.fileName, 18), ML, 158)
+
+            ctx.fillStyle = DIM
+            ctx.font = "24px " + MONO
+            ctx.fillText("全程 " + meta.distanceKm + " KM · 采样 " + samples.length + " 点", ML, 200)
+            ctx.fillText(meta.timeRange, ML, 234)
+
+            ctx.strokeStyle = HAIR
+            ctx.lineWidth = 1
+            ctx.beginPath()
+            ctx.moveTo(ML, 262)
+            ctx.lineTo(CARD_W - MR, 262)
+            ctx.stroke()
+
+            drawProfile(ctx, { x: ML, y: 290, w: CONTENT_W, h: 340 }, samples, { palette: T.palette })
+
+            const risks = layout.risks
+            ctx.fillStyle = DIM
+            ctx.font = "22px " + SANS
+            ctx.fillText("风险摘要", ML, 692)
+            let rowY = 728
+            if (!risks.length) {
+                ctx.fillStyle = T.ok
+                ctx.font = "24px " + SANS
+                ctx.fillText("✓ 全程无显著风险", ML, rowY)
+            } else {
+                for (const r of risks) {
+                    ctx.strokeStyle = HAIR
+                    ctx.beginPath()
+                    ctx.moveTo(ML, rowY - 20)
+                    ctx.lineTo(CARD_W - MR, rowY - 20)
+                    ctx.stroke()
+                    ctx.font = "28px " + MONO
+                    ctx.fillText(riskEmoji(r.tags), ML, rowY)
+                    ctx.fillStyle = INK
+                    ctx.font = "26px " + MONO
+                    ctx.fillText(r.sample.fullLabel || r.label, 150, rowY)
+                    ctx.fillStyle = DIM
+                    ctx.font = "22px " + SANS
+                    ctx.fillText(truncateRisk(r.text), 370, rowY)
+                    rowY += 56
+                }
+            }
+
+            ctx.strokeStyle = HAIR
+            ctx.beginPath()
+            ctx.moveTo(ML, layout.tableTitleY - 20)
+            ctx.lineTo(CARD_W - MR, layout.tableTitleY - 20)
+            ctx.stroke()
+
+            ctx.fillStyle = DIM
+            ctx.font = "22px " + SANS
+            ctx.fillText("逐小时明细", ML, layout.tableTitleY)
+
+            ctx.fillStyle = DIM
+            ctx.font = "20px " + SANS
+            ctx.textAlign = "left"
+            ctx.fillText("时间", COLS.time, layout.tableHeaderY)
+            ctx.fillText("天气", COLS.weather, layout.tableHeaderY)
+            ctx.textAlign = "right"
+            ctx.fillText("气温°C", COLS.temp, layout.tableHeaderY)
+            ctx.fillText("体感°C", COLS.feel, layout.tableHeaderY)
+            ctx.fillText("降水%", COLS.precip, layout.tableHeaderY)
+            ctx.fillText("风速m/s", COLS.wind, layout.tableHeaderY)
+            ctx.fillText("里程km", COLS.km, layout.tableHeaderY)
+
+            ctx.strokeStyle = HAIR
+            ctx.beginPath()
+            ctx.moveTo(ML, layout.tableHeaderY + 12)
+            ctx.lineTo(CARD_W - MR, layout.tableHeaderY + 12)
+            ctx.stroke()
+
+            let y = layout.rowsStartY
+            let lastDay = ""
+            let rowIndex = 0
+            for (const s of samples) {
+                const label = s.timeLabel || ""
+                const day = label.length > 5 ? label.split(" ")[0] : ""
+                if (day && day !== lastDay) {
+                    lastDay = day
+                    ctx.fillStyle = DIM
+                    ctx.font = "20px " + MONO
+                    ctx.textAlign = "center"
+                    ctx.fillText("— " + day + " —", CARD_W / 2, y)
+                    ctx.textAlign = "left"
+                    y += 32
+                }
+                if (rowIndex % 2 === 1) {
+                    ctx.fillStyle = ZEBRA
+                    ctx.fillRect(ML, y - 30, CONTENT_W, 44)
+                }
+                ctx.fillStyle = INK
+                ctx.font = "22px " + MONO
+                ctx.textAlign = "left"
+                ctx.fillText(s.shortLabel || label, COLS.time, y)
+                ctx.font = "20px " + MONO
+                ctx.fillText(s.emoji, COLS.weather, y)
+                ctx.fillStyle = DIM
+                ctx.font = "20px " + SANS
+                ctx.fillText(truncateWeather(s.weather), COLS.weatherText, y)
+                ctx.fillStyle = INK
+                ctx.font = "22px " + MONO
+                ctx.textAlign = "right"
+                ctx.fillText(fmt(s.temperature, 1), COLS.temp, y)
+                ctx.fillStyle = s.apparentTemperature <= 5 ? T.cold : INK
+                ctx.fillText(fmt(s.apparentTemperature, 1), COLS.feel, y)
+                ctx.fillStyle = s.precipProb >= 60 ? ACCENT : INK
+                ctx.fillText(fmt(s.precipProb, 0), COLS.precip, y)
+                ctx.fillStyle = s.windSpeed >= 10 ? ACCENT : INK
+                ctx.fillText(fmt(s.windSpeed, 1), COLS.wind, y)
+                ctx.fillStyle = INK
+                ctx.fillText(s.distanceKm.toFixed(2), COLS.km, y)
+                ctx.textAlign = "left"
+                y += layout.rowH
+                rowIndex += 1
+            }
+
+            ctx.fillStyle = DIM
+            ctx.font = "20px " + SANS
+            ctx.textAlign = "center"
+            ctx.fillText("数据来源 Open-Meteo · GPX 逐小时气象采样", CARD_W / 2, H - 96)
+            ctx.fillText("赛道时区 " + (meta.tzLabel || "—") + " · 生成时间 " + (meta.generatedAt || "—"), CARD_W / 2, H - 66)
+            ctx.fillText("山野天气多变，出发前请再次确认", CARD_W / 2, H - 36)
+
+            ctx.restore()
+        }
+
+        function fmt(value, digits) {
+            return Number.isFinite(value) ? value.toFixed(digits) : "-"
+        }
+
+        function buildDisplaySamples(samples) {
+            return samples.map(s => ({
+                timeMs: s.timeMs,
+                timeLabel: s.timeLabel,
+                emoji: s.emoji,
+                weather: s.weather,
+                temperature: fmt(s.temperature, 1),
+                apparentTemperature: fmt(s.apparentTemperature, 1),
+                precipProb: fmt(s.precipProb, 0),
+                windSpeed: fmt(s.windSpeed, 1),
+                windDir: s.windDir,
+                distanceKm: fmt(s.distanceKm, 2)
+            }))
+        }
+
+        function finalizeSamples(samples) {
+            let lastDay = ""
+            for (const s of samples) {
+                const day = courseDayLabel(s.timeMs, offsetSec)
+                const withDate = day !== lastDay
+                lastDay = day
+                s.timeLabel = formatCourseLabel(s.timeMs, offsetSec, withDate)
+                s.shortLabel = formatCourseLabel(s.timeMs, offsetSec, false)
+                s.fullLabel = formatCourseLabel(s.timeMs, offsetSec, true)
+            }
+            lastSamples = samples
+            displaySamples = buildDisplaySamples(samples)
+            riskItems = analyzeRisks(samples)
+            generatedAt = new Date()
+            selectedIndex = -1
+            detailPanel.style.display = "none"
+            showResults()
+            exportCardBtn.disabled = false
+            exportCsvBtn.disabled = false
+            shareBtn.disabled = false
+            profileSub.textContent = "气温沿里程 · 蓝条为降水概率 · " + tzLabel()
+        }
+
+        async function applyWeatherToSamples(samples, startDate, endDate) {
+            const grouped = new Map()
+            for (const sample of samples) {
+                const roundedLat = roundCoord(sample.lat)
+                const roundedLon = roundCoord(sample.lon)
+                const key = `${roundedLat.toFixed(3)},${roundedLon.toFixed(3)}`
+                sample.cacheKey = key
+                if (!grouped.has(key)) {
+                    grouped.set(key, { lat: roundedLat, lon: roundedLon })
+                }
+            }
+            const entries = Array.from(grouped.entries())
+            const dataByKey = new Map()
+            for (let i = 0; i < entries.length; i++) {
+                const entry = entries[i]
+                setStatus(`正在获取天气数据（${i + 1}/${entries.length} 个位置）…`)
+                const data = await fetchWeather(entry[1].lat, entry[1].lon, startDate, endDate)
+                dataByKey.set(entry[0], data)
+                if (i === 0) {
+                    if (Number.isFinite(data.utc_offset_seconds)) {
+                        offsetSec = data.utc_offset_seconds
+                    }
+                    if (data.timezone) {
+                        tzName = data.timezone
+                    }
+                }
+            }
+            for (const sample of samples) {
+                const data = dataByKey.get(sample.cacheKey)
+                const idx = matchHourIndex(data.hourly.time, sample.timeMs, offsetSec)
+                const code = data.hourly.weathercode[idx]
+                sample.weatherCode = code
+                sample.weather = weatherCodeMap[code] || "天气代码 " + code
+                sample.emoji = weatherEmoji(code)
+                sample.temperature = data.hourly.temperature_2m[idx]
+                sample.apparentTemperature = data.hourly.apparent_temperature[idx]
+                sample.windSpeed = data.hourly.windspeed_10m[idx]
+                sample.windDeg = data.hourly.winddirection_10m[idx]
+                sample.windDir = windDirectionText(sample.windDeg)
+                sample.precipProb = data.hourly.precipitation_probability[idx]
+            }
+        }
+
+        function prepareCanvas(canvas, cssH) {
+            const parentW = canvas.parentElement.clientWidth
+            if (!parentW) {
+                return null
+            }
+            const dpr = window.devicePixelRatio || 1
+            canvas.style.height = cssH + "px"
+            canvas.width = Math.round(parentW * dpr)
+            canvas.height = Math.round(cssH * dpr)
+            const ctx = canvas.getContext("2d")
+            ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
+            return { ctx, w: parentW, h: cssH, dpr }
+        }
+
+        function renderCharts() {
+            if (!lastSamples.length) return
+            const p = prepareCanvas(profileCanvas, 320)
+            if (p) {
+                drawProfile(p.ctx, { x: 0, y: 0, w: p.w, h: p.h }, lastSamples, { selectedIndex })
+            }
+            const t = prepareCanvas(trendCanvas, 260)
+            if (t) {
+                drawTrend(t.ctx, { x: 0, y: 0, w: t.w, h: t.h }, lastSamples, { selectedIndex })
+            }
+        }
+
+        function showResults() {
+            resultsWrap.style.display = ""
+            renderRisks()
+            renderTable()
+            requestAnimationFrame(() => renderCharts())
+        }
+
+        function renderRisks() {
+            if (!riskItems.length) {
+                riskWrap.innerHTML = '<span class="chip-ok">✓ 全程无显著风险</span>'
+                return
+            }
+            riskWrap.innerHTML = riskItems
+                .map(r => `<span class="chip-risk"><span class="mono">${r.label}</span> ${r.text}</span>`)
+                .join("")
+        }
+
+        function renderTable() {
+            if (!lastSamples.length) {
                 tableWrapper.innerHTML = ""
                 return
             }
-            const rows = samples.map(item => {
+            const rows = displaySamples.map((s, i) => {
+                const precipNum = Number(s.precipProb)
+                const windNum = Number(s.windSpeed)
+                const appTempNum = Number(s.apparentTemperature)
                 return `
-                    <tr>
-                        <td>${item.timeLabel}</td>
-                        <td>${item.weather}</td>
-                        <td>${item.temperature.toFixed(1)}</td>
-                        <td>${item.apparentTemperature.toFixed(1)}</td>
-                        <td>${item.windSpeed.toFixed(1)}</td>
-                        <td>${windDirectionText(item.windDirection)}</td>
-                        <td>${item.distanceKm.toFixed(2)}</td>
+                    <tr class="${i === selectedIndex ? "sel" : ""}" data-i="${i}">
+                        <td class="mono">${s.timeLabel}</td>
+                        <td>${s.emoji} ${s.weather}</td>
+                        <td class="mono">${s.temperature}</td>
+                        <td class="mono ${Number.isFinite(appTempNum) && appTempNum <= 5 ? "cold" : ""}">${s.apparentTemperature}</td>
+                        <td class="mono ${Number.isFinite(precipNum) && precipNum >= 60 ? "warn" : ""}">${s.precipProb}</td>
+                        <td class="mono ${Number.isFinite(windNum) && windNum >= 10 ? "warn" : ""}">${s.windSpeed}</td>
+                        <td>${s.windDir}</td>
+                        <td class="mono">${s.distanceKm}</td>
                     </tr>
                 `
             }).join("")
-
             tableWrapper.innerHTML = `
                 <table>
                     <thead>
@@ -639,6 +1821,7 @@
                             <th>天气情况</th>
                             <th>气温 (°C)</th>
                             <th>体感温度 (°C)</th>
+                            <th>降水概率 (%)</th>
                             <th>风速 (m/s)</th>
                             <th>风向</th>
                             <th>沿线里程 (km)</th>
@@ -649,53 +1832,146 @@
                     </tbody>
                 </table>
             `
+            tableWrapper.querySelectorAll("tbody tr").forEach(tr => {
+                tr.addEventListener("click", () => selectSample(Number(tr.dataset.i)))
+            })
         }
 
-        function formatTimeLabel(date) {
-            return new Intl.DateTimeFormat("zh-CN", {
-                year: "numeric",
-                month: "2-digit",
-                day: "2-digit",
-                hour: "2-digit",
-                minute: "2-digit",
-                hour12: false
-            }).format(date)
-        }
-
-        function exportCsv(samples) {
-            if (!samples.length) {
+        function updateDetailPanel() {
+            if (selectedIndex < 0 || !lastSamples[selectedIndex]) {
+                detailPanel.style.display = "none"
                 return
             }
-            const header = ["时间", "天气情况", "气温(°C)", "体感温度(°C)", "风速(m/s)", "风向", "沿线里程(km)"]
-            const rows = samples.map(item => [
-                item.timeLabel,
-                item.weather,
-                item.temperature.toFixed(1),
-                item.apparentTemperature.toFixed(1),
-                item.windSpeed.toFixed(1),
-                windDirectionText(item.windDirection),
-                item.distanceKm.toFixed(2)
-            ])
-            const csv = [header, ...rows].map(row => row.map(cell => `"${String(cell).replace(/"/g, "\"\"")}"`).join(",")).join("\n")
-            const blob = new Blob(["\uFEFF", csv], { type: "text/csv;charset=utf-8;" })
+            const s = lastSamples[selectedIndex]
+            detailPanel.style.display = ""
+            dEmoji.textContent = s.emoji || ""
+            dTime.textContent = s.timeLabel
+            dWeather.textContent = s.weather
+            dTemp.textContent = fmt(s.temperature, 1) + "°C"
+            dFeel.textContent = fmt(s.apparentTemperature, 1) + "°C"
+            dPrecip.textContent = fmt(s.precipProb, 0) + "%"
+            dWind.textContent = fmt(s.windSpeed, 1) + "m/s"
+            dWindDir.textContent = s.windDir
+            dKm.textContent = fmt(s.distanceKm, 2) + "km"
+        }
+
+        function selectSample(i) {
+            if (!lastSamples[i]) return
+            selectedIndex = i
+            renderCharts()
+            renderTable()
+            updateDetailPanel()
+        }
+
+        function setStatus(text) {
+            statusEl.textContent = text
+        }
+
+        function setFileInfo(text) {
+            fileInfo.textContent = text
+        }
+
+        function downloadBlob(blob, filename) {
             const url = URL.createObjectURL(blob)
             const link = document.createElement("a")
-            const safeStart = lastRange.start ? formatFileTime(lastRange.start) : ""
-            const safeEnd = lastRange.end ? formatFileTime(lastRange.end) : ""
-            const base = gpxFileName || "gpx"
-            const nameParts = [base, safeStart, safeEnd].filter(Boolean)
-            const filename = nameParts.join("_") || `gpx-hourly-weather-${new Date().toISOString().replace(/[:]/g, "-").slice(0, 19)}`
             link.href = url
-            link.download = `${filename}.csv`
+            link.download = filename
             document.body.appendChild(link)
             link.click()
             document.body.removeChild(link)
-            URL.revokeObjectURL(url)
+            setTimeout(() => URL.revokeObjectURL(url), 1000)
         }
 
-        function formatFileTime(date) {
-            const pad = value => String(value).padStart(2, "0")
-            return `${date.getFullYear()}${pad(date.getMonth() + 1)}${pad(date.getDate())}-${pad(date.getHours())}${pad(date.getMinutes())}`
+        function downloadDataUrl(dataUrl, filename) {
+            const link = document.createElement("a")
+            link.href = dataUrl
+            link.download = filename
+            document.body.appendChild(link)
+            link.click()
+            document.body.removeChild(link)
+        }
+
+        function safeBaseName() {
+            return (titleInput.value.trim() || gpxFileName || "gpx").replace(/[\\/:*?"<>|]/g, "_")
+        }
+
+        function exportCsv() {
+            if (!lastSamples.length) {
+                return
+            }
+            const header = ["时间", "天气", "气温(°C)", "体感(°C)", "降水概率(%)", "风速(m/s)", "风向", "沿线里程(km)"]
+            const rows = lastSamples.map(item => [
+                item.fullLabel,
+                item.weather,
+                fmt(item.temperature, 1),
+                fmt(item.apparentTemperature, 1),
+                fmt(item.precipProb, 0),
+                fmt(item.windSpeed, 1),
+                item.windDir,
+                fmt(item.distanceKm, 2)
+            ])
+            const csv = "\uFEFF" + [header, ...rows].map(row => row.map(cell => `"${String(cell).replace(/"/g, "\"\"")}"`).join(",")).join("\n")
+            const safeStart = lastRange.start ? formatFileTime(lastRange.start) : ""
+            const safeEnd = lastRange.end ? formatFileTime(lastRange.end) : ""
+            const nameParts = [safeBaseName(), safeStart, safeEnd].filter(Boolean)
+            downloadBlob(new Blob([csv], { type: "text/csv;charset=utf-8;" }), `${nameParts.join("_")}.csv`)
+        }
+
+        function exportChartImage(kind) {
+            if (!lastSamples.length) return
+            renderCharts()
+            const src = kind === "profile" ? profileCanvas : trendCanvas
+            const dpr = window.devicePixelRatio || 1
+            const w = src.width
+            const h = src.height
+            const tmp = document.createElement("canvas")
+            tmp.width = w
+            tmp.height = h
+            const ctx = tmp.getContext("2d")
+            ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
+            const dark = exportTheme === "dark"
+            const palette = dark ? PALETTE_DARK : PALETTE_LIGHT
+            ctx.fillStyle = dark ? CARD_THEMES.dark.bg : "#ffffff"
+            ctx.fillRect(0, 0, w, h)
+            const rect = { x: 0, y: 0, w: w / dpr, h: h / dpr }
+            if (kind === "profile") {
+                drawProfile(ctx, rect, lastSamples, { selectedIndex, palette })
+            } else {
+                drawTrend(ctx, rect, lastSamples, { selectedIndex, palette })
+            }
+            const name = kind === "profile" ? "赛道天气剖面" : "温度与风速"
+            downloadDataUrl(tmp.toDataURL("image/png"), `${safeBaseName()}_${name}_${dark ? "暗色" : "亮色"}.png`)
+            setStatus(`${name}图片已导出（${dark ? "暗色" : "亮色"}）`)
+        }
+
+        function exportCardImage() {
+            if (!lastSamples.length) {
+                return
+            }
+            const meta = {
+                fileName: safeBaseName(),
+                distanceKm: (gpxData ? gpxData.totalDistance / 1000 : lastSamples[lastSamples.length - 1].distanceKm).toFixed(1),
+                timeRange: lastSamples[0].fullLabel + " → " + lastSamples[lastSamples.length - 1].fullLabel,
+                tzLabel: tzLabel(),
+                generatedAt: formatDateTime(generatedAt || new Date())
+            }
+            const cardH = weatherCardHeight(lastSamples)
+            const dpr = window.devicePixelRatio || 1
+            const scale = Math.max(0.5, Math.min(dpr, CARD_MAX_PX / cardH))
+            const canvas = document.createElement("canvas")
+            canvas.width = Math.round(CARD_W * scale)
+            canvas.height = Math.round(cardH * scale)
+            const ctx = canvas.getContext("2d")
+            ctx.scale(scale, scale)
+            drawWeatherCard(ctx, lastSamples, meta, exportTheme)
+            canvas.toBlob(blob => {
+                if (!blob) {
+                    setStatus("生成天气卡图片失败")
+                    return
+                }
+                downloadBlob(blob, `${safeBaseName()}_天气卡_${exportTheme === "dark" ? "暗色" : "亮色"}.png`)
+                setStatus("天气卡图片已导出")
+            }, "image/png")
         }
 
         function compressData(data) {
@@ -724,14 +2000,6 @@
             }
         }
 
-        function setStatus(text) {
-            statusEl.textContent = text
-        }
-
-        function setFileInfo(text) {
-            fileInfo.textContent = text
-        }
-
         uploadArea.addEventListener("click", () => fileInput.click())
 
         uploadArea.addEventListener("dragover", event => {
@@ -758,14 +2026,67 @@
             }
         })
 
-        useDurationInput.addEventListener("change", () => {
-            const useDuration = useDurationInput.checked
-            endTimeInput.style.display = useDuration ? "none" : "block"
-            durationHoursInput.style.display = useDuration ? "block" : "none"
-            endLabel.textContent = useDuration ? "持续时长" : "结束时间"
+        function setMode(duration) {
+            useDuration = duration
+            modeDurationBtn.classList.toggle("on", duration)
+            modeTimeBtn.classList.toggle("on", !duration)
+            endTimeInput.style.display = duration ? "none" : "block"
+            durationBox.style.display = duration ? "block" : "none"
+        }
+
+        modeDurationBtn.addEventListener("click", () => setMode(true))
+        modeTimeBtn.addEventListener("click", () => setMode(false))
+
+        function syncDurChips() {
+            durChips.forEach(chip => chip.classList.toggle("on", chip.dataset.h === durationHoursInput.value))
+        }
+
+        durationHoursInput.addEventListener("input", syncDurChips)
+
+        durChips.forEach(chip => {
+            chip.addEventListener("click", () => {
+                durationHoursInput.value = chip.dataset.h
+                syncDurChips()
+            })
         })
 
-        exportBtn.addEventListener("click", () => exportCsv(lastSamples))
+        exportCsvBtn.addEventListener("click", exportCsv)
+        exportCardBtn.addEventListener("click", exportCardImage)
+        profileExportBtn.addEventListener("click", () => exportChartImage("profile"))
+        trendExportBtn.addEventListener("click", () => exportChartImage("trend"))
+
+        exportLightBtn.addEventListener("click", () => {
+            exportTheme = "light"
+            exportLightBtn.classList.add("on")
+            exportDarkBtn.classList.remove("on")
+        })
+
+        exportDarkBtn.addEventListener("click", () => {
+            exportTheme = "dark"
+            exportDarkBtn.classList.add("on")
+            exportLightBtn.classList.remove("on")
+        })
+
+        profileCanvas.addEventListener("click", event => {
+            if (!lastSamples.length) return
+            const rect = profileCanvas.getBoundingClientRect()
+            const i = profileHitIndex(event.clientX - rect.left, { x: 0, y: 0, w: rect.width, h: rect.height }, lastSamples)
+            if (i >= 0) selectSample(i)
+        })
+
+        trendCanvas.addEventListener("click", event => {
+            if (!lastSamples.length) return
+            const rect = trendCanvas.getBoundingClientRect()
+            const i = trendHitIndex(event.clientX - rect.left, { x: 0, y: 0, w: rect.width, h: rect.height }, lastSamples)
+            if (i >= 0) selectSample(i)
+        })
+
+        window.addEventListener("resize", () => {
+            clearTimeout(resizeTimer)
+            resizeTimer = setTimeout(() => {
+                if (lastSamples.length) renderCharts()
+            }, 200)
+        })
 
         shareBtn.addEventListener("click", () => {
             if (!lastSamples.length) {
@@ -773,25 +2094,29 @@
             }
             const compressed = compressData({
                 samples: lastSamples.map(s => ({
-                    t: s.time.getTime(),
+                    t: s.timeMs,
                     lat: s.lat,
                     lon: s.lon,
                     d: s.distanceKm,
+                    c: s.weatherCode,
                     w: s.weather,
                     temp: s.temperature,
                     atemp: s.apparentTemperature,
                     ws: s.windSpeed,
-                    wd: s.windDirection
+                    wd: s.windDeg,
+                    p: s.precipProb
                 })),
                 fileName: gpxFileName,
                 start: lastRange.start ? lastRange.start.getTime() : null,
-                end: lastRange.end ? lastRange.end.getTime() : null
+                end: lastRange.end ? lastRange.end.getTime() : null,
+                offset: offsetSec,
+                tz: tzName
             })
             const url = new URL(window.location.href)
             url.search = ""
             url.hash = compressed
             const urlString = url.toString()
-            
+
             if (urlString.length > 100000) {
                 const warning = `⚠️ 链接长度 ${urlString.length} 字符，超过建议上限（100000 字符），可能在部分浏览器中无法使用`
                 setStatus(warning)
@@ -799,15 +2124,13 @@
                     return
                 }
             }
-            
+
             navigator.clipboard.writeText(urlString).then(() => {
                 setStatus("分享链接已复制到剪贴板")
             }).catch(() => {
                 prompt("分享链接：", urlString)
             })
         })
-
-        startTimeInput.value = toLocalDatetimeValue(nextFullHour())
 
         function loadSharedData() {
             const encoded = window.location.hash.slice(1)
@@ -819,17 +2142,22 @@
                 setStatus("无法加载分享数据")
                 return
             }
+            offsetSec = Number.isFinite(data.offset) ? data.offset : browserOffsetSec()
+            tzName = data.tz || ""
             lastSamples = data.samples.map(s => ({
-                time: new Date(s.t),
-                timeLabel: formatTimeLabel(new Date(s.t)),
+                timeMs: s.t,
                 lat: s.lat,
                 lon: s.lon,
                 distanceKm: s.d,
+                weatherCode: s.c,
                 weather: s.w,
                 temperature: s.temp,
-                apparentTemperature: s.atemp || s.temp,
+                apparentTemperature: s.atemp != null ? s.atemp : s.temp,
                 windSpeed: s.ws,
-                windDirection: s.wd
+                windDeg: s.wd,
+                windDir: windDirectionText(s.wd),
+                precipProb: s.p,
+                emoji: weatherEmoji(s.c)
             }))
             gpxFileName = data.fileName || "shared"
             if (data.start) {
@@ -838,18 +2166,14 @@
             if (data.end) {
                 lastRange.end = new Date(data.end)
             }
-            renderChart(lastSamples)
-            renderTable(lastSamples)
-            exportBtn.disabled = false
-            shareBtn.disabled = false
+            finalizeSamples(lastSamples)
+            titleInput.value = gpxFileName
+            isSharedData = true
             generateBtn.disabled = false
             generateBtn.textContent = "刷新天气数据"
-            isSharedData = true
             setFileInfo(`已加载分享数据，共 ${lastSamples.length} 个采样点`)
             setStatus(`已加载分享数据，共 ${lastSamples.length} 个采样点`)
         }
-
-        loadSharedData()
 
         function handleFile(file) {
             if (!file) return
@@ -858,6 +2182,10 @@
             const isTcx = lowerName.endsWith(".tcx")
             if (!isGpx && !isTcx) {
                 setFileInfo("请选择 GPX 或 TCX 文件")
+                return
+            }
+            if (file.size > 5 * 1024 * 1024) {
+                setFileInfo("文件过大，请选择 5MB 以内的轨迹文件")
                 return
             }
             gpxFileName = file.name.replace(/\.[^/.]+$/, "")
@@ -871,101 +2199,127 @@
                     return
                 }
                 gpxData = parsed
-                setFileInfo(`已加载：${file.name}，轨迹点 ${parsed.points.length} 个，总里程 ${(parsed.totalDistance / 1000).toFixed(2)} km`)
-                const times = parsed.points.map(p => p.time).filter(Boolean)
-                if (times.length > 0) {
-                    const sorted = times.sort((a, b) => a - b)
-                    startTimeInput.value = toLocalDatetimeValue(sorted[0])
-                    endTimeInput.value = toLocalDatetimeValue(sorted[sorted.length - 1])
-                }
                 isSharedData = false
+                lastSamples = []
+                displaySamples = []
+                riskItems = []
+                selectedIndex = -1
+                resultsWrap.style.display = "none"
+                exportCardBtn.disabled = true
+                exportCsvBtn.disabled = true
+                shareBtn.disabled = true
                 generateBtn.textContent = "生成逐小时气象采样"
                 generateBtn.disabled = false
+                titleInput.value = gpxFileName
+                setFileInfo(`已加载：${file.name}，轨迹点 ${parsed.points.length} 个，总里程 ${(parsed.totalDistance / 1000).toFixed(2)} km`)
+                const times = parsed.points.map(p => p.time).filter(Boolean)
+                let firstMs = null
+                let lastMs = null
+                if (times.length) {
+                    const ms = times.map(t => t.getTime())
+                    firstMs = Math.min.apply(null, ms)
+                    lastMs = Math.max.apply(null, ms)
+                    startTimeInput.value = toLocalDatetimeValue(new Date(firstMs))
+                    endTimeInput.value = toLocalDatetimeValue(new Date(lastMs))
+                    const spanHours = (lastMs - firstMs) / 3600000
+                    if (spanHours > 0) {
+                        durationHoursInput.value = String(Math.round(spanHours * 10) / 10)
+                        syncDurChips()
+                    }
+                }
+                offsetSec = null
+                tzName = ""
+                tzNote.textContent = "出发与完赛时间均按赛道当地时间填写与显示"
+                probeOffset(parsed)
+                    .then(offset => {
+                        if (gpxData !== parsed) return
+                        offsetSec = offset
+                        tzName = parsed.tzName || ""
+                        tzNote.textContent = "赛道时区：" + tzLabel() + " · 时间按赛道当地时间填写与显示"
+                        if (firstMs !== null) {
+                            const s = instantToCourseWall(new Date(firstMs), offset)
+                            const e = instantToCourseWall(new Date(lastMs), offset)
+                            startTimeInput.value = s.date + "T" + s.time
+                            endTimeInput.value = e.date + "T" + e.time
+                        }
+                    })
+                    .catch(() => {
+                        offsetSec = browserOffsetSec()
+                        tzNote.textContent = "无法获取赛道时区，已按浏览器时区解析时间"
+                    })
             }
             reader.readAsText(file)
         }
 
-        generateBtn.addEventListener("click", async () => {
-            if (isSharedData) {
-                if (!lastSamples.length) {
-                    setStatus("无可刷新的数据")
-                    return
-                }
-                if (shouldBlockWeatherFetch()) {
-                    return
-                }
-                generateBtn.disabled = true
-                setStatus("正在刷新天气数据...")
-                
-                const startDate = toLocalDateString(lastRange.start)
-                const endDate = toLocalDateString(lastRange.end)
-                
-                try {
-                    const grouped = new Map()
-                    for (const sample of lastSamples) {
-                        const roundedLat = roundCoord(sample.lat)
-                        const roundedLon = roundCoord(sample.lon)
-                        const key = `${roundedLat.toFixed(3)},${roundedLon.toFixed(3)}`
-                        sample.cacheKey = key
-                        if (!grouped.has(key)) {
-                            grouped.set(key, { lat: roundedLat, lon: roundedLon })
-                        }
-                    }
-                    
-                    weatherCache.clear()
-                    const weatherDataByKey = new Map()
-                    for (const [key, info] of grouped.entries()) {
-                        const data = await fetchWeather(info.lat, info.lon, startDate, endDate)
-                        weatherDataByKey.set(key, data)
-                    }
-                    
-                    for (const sample of lastSamples) {
-                        const data = weatherDataByKey.get(sample.cacheKey)
-                        const times = data.hourly.time
-                        const idx = closestHourIndex(times, sample.time)
-                        const code = data.hourly.weathercode[idx]
-                        sample.weather = weatherCodeMap[code] || `天气代码 ${code}`
-                        sample.temperature = data.hourly.temperature_2m[idx]
-                        sample.apparentTemperature = data.hourly.apparent_temperature[idx]
-                        sample.windSpeed = data.hourly.windspeed_10m[idx]
-                        sample.windDirection = data.hourly.winddirection_10m[idx]
-                    }
-                    
-                    renderChart(lastSamples)
-                    renderTable(lastSamples)
-                    setStatus(`刷新完成，共 ${lastSamples.length} 个采样点`)
-                } catch (error) {
-                    console.error("天气数据刷新失败：", error)
-                    const errorMsg = error.message || "刷新天气数据失败"
-                    const detailedMsg = error.stack ? `${errorMsg}（详见控制台）` : errorMsg
-                    setStatus(`❌ ${detailedMsg}`)
-                } finally {
-                    generateBtn.disabled = false
-                }
+        async function refreshShared() {
+            if (!lastSamples.length) {
+                setStatus("无可刷新的数据")
                 return
             }
-            
+            if (shouldBlockWeatherFetch()) {
+                return
+            }
+            generateBtn.disabled = true
+            generateBtn.textContent = "正在刷新…"
+            setStatus("正在刷新天气数据…")
+            try {
+                if (!Number.isFinite(offsetSec)) offsetSec = browserOffsetSec()
+                const startMs = lastRange.start ? lastRange.start.getTime() : lastSamples[0].timeMs
+                const endMs = lastRange.end ? lastRange.end.getTime() : lastSamples[lastSamples.length - 1].timeMs
+                const fetchStart = new Date(startMs + offsetSec * 1000 - 86400000)
+                const fetchEnd = new Date(endMs + offsetSec * 1000 + 86400000)
+                weatherCache.clear()
+                await applyWeatherToSamples(lastSamples, dateStrUtc(fetchStart), dateStrUtc(fetchEnd))
+                finalizeSamples(lastSamples)
+                setStatus(`刷新完成，共 ${lastSamples.length} 个采样点`)
+            } catch (error) {
+                console.error("天气数据刷新失败：", error)
+                setStatus("❌ " + (error.message || "刷新天气数据失败"))
+            } finally {
+                generateBtn.disabled = false
+                generateBtn.textContent = "刷新天气数据"
+            }
+        }
+
+        generateBtn.addEventListener("click", async () => {
+            if (isSharedData) {
+                refreshShared()
+                return
+            }
             if (!gpxData) {
-                setStatus("请先上传 GPX 文件")
+                setStatus("请先上传 GPX / TCX 文件")
                 return
             }
             const startValue = startTimeInput.value
-            const endValue = endTimeInput.value
-            const useDuration = useDurationInput.checked
-            if (!startValue || (!endValue && !useDuration)) {
-                setStatus("请填写起始时间")
+            if (!startValue) {
+                setStatus("请填写出发时间")
                 return
             }
-            const start = new Date(startValue)
-            const end = useDuration
-                ? new Date(start.getTime() + Number(durationHoursInput.value || 0) * 3600000)
-                : new Date(endValue)
-            if (useDuration && (!durationHoursInput.value || Number(durationHoursInput.value) <= 0)) {
-                setStatus("请填写有效的持续时长")
-                return
+            let offset
+            try {
+                offset = await probeOffset(gpxData)
+            } catch (err) {
+                offset = browserOffsetSec()
+            }
+            const start = new Date(courseWallToInstant(startValue, offset))
+            let end
+            if (useDuration) {
+                const hours = parseFloat(durationHoursInput.value)
+                if (!Number.isFinite(hours) || hours <= 0) {
+                    setStatus("请填写有效的完赛时长")
+                    return
+                }
+                end = new Date(start.getTime() + hours * 3600000)
+            } else {
+                const endValue = endTimeInput.value
+                if (!endValue) {
+                    setStatus("请填写完赛时刻")
+                    return
+                }
+                end = new Date(courseWallToInstant(endValue, offset))
             }
             if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime()) || end <= start) {
-                setStatus("时间范围无效")
+                setStatus("时间范围无效，请检查出发与完赛时间")
                 return
             }
             if (shouldBlockWeatherFetch()) {
@@ -973,78 +2327,54 @@
             }
 
             generateBtn.disabled = true
-            setStatus("正在生成采样点并获取天气数据...")
-
-            const duration = end.getTime() - start.getTime()
-            lastRange = { start, end }
-            const sampleTimes = generateSampleTimes(start, end)
-            const samples = []
-
-            let index = 0
-            for (const time of sampleTimes) {
-                const ratio = (time.getTime() - start.getTime()) / duration
-                const targetDistance = gpxData.totalDistance * Math.min(Math.max(ratio, 0), 1)
-                const { lat, lon, index: newIndex } = interpolateByDistance(gpxData, targetDistance, index)
-                index = newIndex
-                samples.push({
-                    time,
-                    timeLabel: formatTimeLabel(time),
-                    lat,
-                    lon,
-                    distanceKm: targetDistance / 1000
-                })
-            }
-
-            const startDate = toLocalDateString(start)
-            const endDate = toLocalDateString(end)
-
+            generateBtn.textContent = "正在采样并获取天气…"
             try {
+                setStatus("正在生成采样点…")
+                offsetSec = offset
+                const duration = end.getTime() - start.getTime()
+                lastRange = { start, end }
+                const sampleTimes = generateSampleTimes(start, end)
+                const samples = []
+                let index = 0
+                for (const time of sampleTimes) {
+                    const ratio = Math.min(Math.max((time.getTime() - start.getTime()) / duration, 0), 1)
+                    const targetDistance = gpxData.totalDistance * ratio
+                    const pos = interpolateByDistance(gpxData, targetDistance, index)
+                    index = pos.index
+                    samples.push({
+                        timeMs: time.getTime(),
+                        time,
+                        lat: pos.lat,
+                        lon: pos.lon,
+                        distanceKm: targetDistance / 1000
+                    })
+                }
                 weatherCache.clear()
-                const grouped = new Map()
-                for (const sample of samples) {
-                    const roundedLat = roundCoord(sample.lat)
-                    const roundedLon = roundCoord(sample.lon)
-                    const key = `${roundedLat.toFixed(3)},${roundedLon.toFixed(3)}`
-                    sample.cacheKey = key
-                    if (!grouped.has(key)) {
-                        grouped.set(key, { lat: roundedLat, lon: roundedLon })
-                    }
-                }
-
-                const weatherDataByKey = new Map()
-                for (const [key, info] of grouped.entries()) {
-                    const data = await fetchWeather(info.lat, info.lon, startDate, endDate)
-                    weatherDataByKey.set(key, data)
-                }
-
-                for (const sample of samples) {
-                    const data = weatherDataByKey.get(sample.cacheKey)
-                    const times = data.hourly.time
-                    const idx = closestHourIndex(times, sample.time)
-                    const code = data.hourly.weathercode[idx]
-                    sample.weather = weatherCodeMap[code] || `天气代码 ${code}`
-                    sample.temperature = data.hourly.temperature_2m[idx]
-                    sample.apparentTemperature = data.hourly.apparent_temperature[idx]
-                    sample.windSpeed = data.hourly.windspeed_10m[idx]
-                    sample.windDirection = data.hourly.winddirection_10m[idx]
-                }
-                lastSamples = samples
-                renderChart(samples)
-                renderTable(samples)
+                const fetchStart = new Date(start.getTime() + offset * 1000 - 86400000)
+                const fetchEnd = new Date(end.getTime() + offset * 1000 + 86400000)
+                await applyWeatherToSamples(samples, dateStrUtc(fetchStart), dateStrUtc(fetchEnd))
+                finalizeSamples(samples)
+                tzNote.textContent = "赛道时区：" + tzLabel() + " · 时间按赛道当地时间填写与显示"
                 setStatus(`完成，共 ${samples.length} 个采样点`)
-                exportBtn.disabled = false
-                shareBtn.disabled = false
             } catch (error) {
                 console.error("天气数据获取失败：", error)
                 const errorMsg = error.message || "获取天气数据失败"
                 const detailedMsg = error.stack ? `${errorMsg}（详见控制台）` : errorMsg
                 setStatus(`❌ ${detailedMsg}`)
-                exportBtn.disabled = true
+                exportCardBtn.disabled = true
+                exportCsvBtn.disabled = true
                 shareBtn.disabled = true
             } finally {
                 generateBtn.disabled = false
+                generateBtn.textContent = "重新生成赛道天气"
             }
         })
+
+        startTimeInput.value = toLocalDatetimeValue(nextFullHour())
+        durationHoursInput.value = "12"
+        setMode(true)
+        syncDurChips()
+        loadSharedData()
     </script>
 </body>
 </html>
