@@ -493,7 +493,7 @@
 
                     <div class="sec-block">
                         <div class="chart-head">
-                            <h3>赛道天气剖面<span class="sec-sub" id="profileSub">气温沿里程 · 蓝条为降水概率</span></h3>
+                            <h3>赛道天气剖面<span class="sec-sub" id="profileSub">气温沿里程 · 蓝条为降水概率 · 浅底色为海拔 · 横轴为里程与时间</span></h3>
                             <button id="profileExportBtn" class="btn-mini" type="button">导出此图</button>
                         </div>
                         <canvas id="profileCanvas" class="chart-canvas" style="height: 320px;"></canvas>
@@ -613,7 +613,10 @@
             tempFillBottom: "rgba(46,124,246,0)",
             rain: "rgba(79,172,254,0.55)",
             wind: "rgba(138,148,160,0.35)",
-            zeroLine: "rgba(43,48,56,0.18)"
+            zeroLine: "rgba(43,48,56,0.18)",
+            ele: "#a3957f",
+            eleFillTop: "rgba(163,149,127,0.05)",
+            eleFillBottom: "rgba(163,149,127,0.18)"
         }
 
         const PALETTE_DARK = {
@@ -627,7 +630,10 @@
             tempFillBottom: "rgba(127,176,105,0)",
             rain: "rgba(111,168,220,0.6)",
             wind: "rgba(147,161,152,0.4)",
-            zeroLine: "rgba(233,237,229,0.22)"
+            zeroLine: "rgba(233,237,229,0.22)",
+            ele: "#a79a86",
+            eleFillTop: "rgba(167,154,134,0.06)",
+            eleFillBottom: "rgba(167,154,134,0.20)"
         }
 
         const CARD_THEMES = {
@@ -1259,6 +1265,15 @@
             return step * mag
         }
 
+        function niceHourStep(hours, target) {
+            const candidates = [1, 2, 3, 6, 12, 24, 48, 96]
+            const per = Math.max(hours / target, 0)
+            for (const c of candidates) {
+                if (c >= per) return c
+            }
+            return 96
+        }
+
         function roundedRect(ctx, x, y, w, h, r) {
             const radius = Math.min(r, w / 2, h / 2)
             ctx.beginPath()
@@ -1288,26 +1303,29 @@
         }
 
         function tracePath(ctx, xs, ys) {
-            let started = false
-            for (let i = 0; i < xs.length; i++) {
+            let start = -1
+            const n = Math.min(xs.length, ys.length)
+            for (let i = 0; i < n; i++) {
                 if (!Number.isFinite(ys[i])) {
-                    started = false
+                    start = -1
                     continue
                 }
-                if (!started) {
+                if (start < 0) {
+                    start = i
                     ctx.moveTo(xs[i], ys[i])
-                    started = true
                     continue
                 }
-                const prevX = xs[i - 1]
-                const prevY = ys[i - 1]
-                if (Number.isFinite(prevY)) {
-                    const midX = (prevX + xs[i]) / 2
-                    ctx.quadraticCurveTo(prevX, prevY, midX, (prevY + ys[i]) / 2)
-                    ctx.lineTo(xs[i], ys[i])
-                } else {
-                    ctx.moveTo(xs[i], ys[i])
-                }
+                const i1 = i - 1
+                const i0 = i1 - 1 >= start ? i1 - 1 : start
+                const i3 = i + 1 < n && Number.isFinite(ys[i + 1]) ? i + 1 : i
+                ctx.bezierCurveTo(
+                    xs[i1] + (xs[i] - xs[i0]) / 6,
+                    ys[i1] + (ys[i] - ys[i0]) / 6,
+                    xs[i] - (xs[i3] - xs[i1]) / 6,
+                    ys[i] - (ys[i3] - ys[i1]) / 6,
+                    xs[i],
+                    ys[i]
+                )
             }
         }
 
@@ -1320,15 +1338,20 @@
 
             const padTop = 58
             const padLeft = 42
-            const padRight = 14
-            const padBottom = 24
+            const padRight = 46
+            const padBottom = 48
             const plotW = rect.w - padLeft - padRight
             const plotH = rect.h - padTop - padBottom
             if (plotW <= 10 || plotH <= 10) return
 
             ctx.save()
             ctx.translate(rect.x, rect.y)
-            ctx.clearRect(0, 0, rect.w, rect.h)
+            if (options.background) {
+                ctx.fillStyle = options.background
+                ctx.fillRect(0, 0, rect.w, rect.h)
+            } else {
+                ctx.clearRect(0, 0, rect.w, rect.h)
+            }
             ctx.font = "9px " + MONO
             ctx.textAlign = "center"
             ctx.textBaseline = "alphabetic"
@@ -1337,6 +1360,21 @@
             const x = d => padLeft + (d / xMax) * plotW
             const range = tempRange(samples)
             const y = t => padTop + ((range.max - t) / (range.max - range.min)) * plotH
+
+            const eleVals = samples.map(s => (Number.isFinite(s.ele) ? s.ele : null))
+            const hasEle = eleVals.some(v => v != null)
+            let eleMin = 0
+            let eleMax = 1
+            let ey = null
+            if (hasEle) {
+                const finiteEles = eleVals.filter(v => v != null)
+                const emin0 = Math.min.apply(null, finiteEles)
+                const emax0 = Math.max.apply(null, finiteEles)
+                const epad = Math.max((emax0 - emin0) * 0.12, 30)
+                eleMin = Math.floor(emin0 - epad)
+                eleMax = Math.ceil(emax0 + epad)
+                ey = e => padTop + ((eleMax - e) / (eleMax - eleMin)) * plotH
+            }
 
             const tStep = niceStep(range.max - range.min, 4)
             ctx.strokeStyle = pal.grid
@@ -1380,7 +1418,57 @@
                 ctx.moveTo(px, padTop)
                 ctx.lineTo(px, rect.h - padBottom)
                 ctx.stroke()
-                ctx.fillText(k + "km", px, rect.h - 8)
+                ctx.fillText(k + "km", px, rect.h - 28)
+            }
+
+            const hourStep = niceHourStep((samples[n - 1].timeMs - samples[0].timeMs) / 3600000, 4)
+            ctx.font = "9px " + MONO
+            ctx.strokeStyle = pal.inkDim
+            ctx.lineWidth = 1
+            const t0 = samples[0].timeMs
+            for (let k = 0; ; k++) {
+                const tickMs = t0 + k * hourStep * 3600000
+                if (tickMs > samples[n - 1].timeMs + 1) break
+                let best = 0
+                let bestDiff = Infinity
+                for (let i = 0; i < n; i++) {
+                    const diff = Math.abs(samples[i].timeMs - tickMs)
+                    if (diff < bestDiff) {
+                        bestDiff = diff
+                        best = i
+                    }
+                }
+                const px = x(samples[best].distanceKm)
+                ctx.beginPath()
+                ctx.moveTo(px, rect.h - padBottom + 1)
+                ctx.lineTo(px, rect.h - padBottom + 7)
+                ctx.stroke()
+                ctx.fillText(samples[best].shortLabel, px, rect.h - 10)
+            }
+
+            if (hasEle) {
+                const eStep = niceStep(eleMax - eleMin, 4)
+                ctx.font = "9px " + MONO
+                ctx.fillStyle = pal.inkDim
+                ctx.strokeStyle = pal.grid
+                ctx.lineWidth = 1
+                ctx.textBaseline = "middle"
+                ctx.textAlign = "center"
+                ctx.beginPath()
+                ctx.moveTo(rect.w - padRight, padTop)
+                ctx.lineTo(rect.w - padRight, rect.h - padBottom)
+                ctx.stroke()
+                ctx.textAlign = "left"
+                for (let e = Math.ceil(eleMin / eStep) * eStep; e <= eleMax; e += eStep) {
+                    const py = ey(e)
+                    ctx.beginPath()
+                    ctx.moveTo(rect.w - padRight - 4, py)
+                    ctx.lineTo(rect.w - padRight, py)
+                    ctx.stroke()
+                    ctx.fillText(e + "m", rect.w - padRight + 6, py)
+                }
+                ctx.textAlign = "center"
+                ctx.textBaseline = "alphabetic"
             }
 
             const barW = 6
@@ -1391,6 +1479,29 @@
                 ctx.fillStyle = pal.rain
                 roundedRect(ctx, x(s.distanceKm) - barW / 2, padTop - 20 + (18 - bh), barW, bh, 2)
                 ctx.fill()
+            }
+
+            if (hasEle) {
+                const exs = samples.map(s => x(s.distanceKm))
+                const eys = eleVals.map((v, i) => (v != null ? ey(v) : NaN))
+                ctx.beginPath()
+                tracePath(ctx, exs, eys)
+                ctx.lineTo(exs[n - 1], rect.h - padBottom)
+                ctx.lineTo(exs[0], rect.h - padBottom)
+                ctx.closePath()
+                const grad = ctx.createLinearGradient(0, padTop, 0, rect.h - padBottom)
+                grad.addColorStop(0, pal.eleFillTop)
+                grad.addColorStop(1, pal.eleFillBottom)
+                ctx.fillStyle = grad
+                ctx.fill()
+                ctx.beginPath()
+                tracePath(ctx, exs, eys)
+                ctx.strokeStyle = pal.ele
+                ctx.lineWidth = 1
+                ctx.lineJoin = "round"
+                ctx.globalAlpha = 0.6
+                ctx.stroke()
+                ctx.globalAlpha = 1
             }
 
             const xs = samples.map(s => x(s.distanceKm))
@@ -1475,7 +1586,12 @@
 
             ctx.save()
             ctx.translate(rect.x, rect.y)
-            ctx.clearRect(0, 0, rect.w, rect.h)
+            if (options.background) {
+                ctx.fillStyle = options.background
+                ctx.fillRect(0, 0, rect.w, rect.h)
+            } else {
+                ctx.clearRect(0, 0, rect.w, rect.h)
+            }
 
             const t0 = samples[0].timeMs
             const tN = samples[n - 1].timeMs
@@ -1607,7 +1723,7 @@
             const n = samples.length
             if (!n) return -1
             const padLeft = 42
-            const padRight = 14
+            const padRight = 46
             const plotW = rect.w - padLeft - padRight
             if (plotW <= 10) return -1
             const xMax = Math.max(samples[n - 1].distanceKm, 1)
@@ -1764,7 +1880,7 @@
             ctx.lineTo(CARD_W - MR, 262)
             ctx.stroke()
 
-            drawProfile(ctx, { x: ML, y: 290, w: CONTENT_W, h: 340 }, samples, { palette: T.palette })
+            drawProfile(ctx, { x: ML, y: 290, w: CONTENT_W, h: 340 }, samples, { palette: T.palette, background: T.bg })
 
             const risks = layout.risks
             ctx.fillStyle = DIM
@@ -1941,8 +2057,8 @@
             const utmb = samples[0] && samples[0].utmb
             modelNote.style.display = utmb ? "" : "none"
             profileSub.textContent = utmb
-                ? "气温中位数沿里程 · 蓝条为降雨模型占比 · " + tzLabel()
-                : "气温沿里程 · 蓝条为降水概率 · " + tzLabel()
+                ? "气温中位数（蓝线）沿里程 · 蓝条为降雨模型占比 · 浅底色为海拔 · 横轴为里程与时间 · " + tzLabel()
+                : "气温（蓝线）沿里程 · 蓝条为降水概率 · 浅底色为海拔 · 横轴为里程与时间 · " + tzLabel()
         }
 
         function finalizeUtmbSample(s) {
@@ -2442,13 +2558,12 @@
             ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
             const dark = exportTheme === "dark"
             const palette = dark ? PALETTE_DARK : PALETTE_LIGHT
-            ctx.fillStyle = dark ? CARD_THEMES.dark.bg : "#ffffff"
-            ctx.fillRect(0, 0, w, h)
+            const bg = dark ? CARD_THEMES.dark.bg : "#ffffff"
             const rect = { x: 0, y: 0, w: w / dpr, h: h / dpr }
             if (kind === "profile") {
-                drawProfile(ctx, rect, lastSamples, { selectedIndex, palette })
+                drawProfile(ctx, rect, lastSamples, { selectedIndex, palette, background: bg })
             } else {
-                drawTrend(ctx, rect, lastSamples, { selectedIndex, palette })
+                drawTrend(ctx, rect, lastSamples, { selectedIndex, palette, background: bg })
             }
             const name = kind === "profile" ? "赛道天气剖面" : "温度与风速"
             downloadDataUrl(tmp.toDataURL("image/png"), `${safeBaseName()}_${name}_${dark ? "暗色" : "亮色"}.png`)
