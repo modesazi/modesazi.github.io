@@ -1227,6 +1227,7 @@
                 if (s.temperature <= 0) tags.push("低温 " + s.temperature.toFixed(0) + "°C")
                 if (s.apparentTemperature <= 5) tags.push("体感 " + s.apparentTemperature.toFixed(0) + "°C")
                 if (s.precipProb >= 60) tags.push("降水概率 " + s.precipProb.toFixed(0) + "%")
+                if (s.precip != null && Number.isFinite(s.precip) && s.precip >= 2) tags.push("雨量 " + s.precip.toFixed(1) + "mm/h")
                 if (tags.length) {
                     entries.push({ sample: s, label: s.shortLabel, text: tags.join(" · "), tags })
                 }
@@ -1928,8 +1929,8 @@
             ctx.textAlign = "right"
             ctx.fillText("气温°C", COLS.temp, layout.tableHeaderY)
             ctx.fillText("体感°C", COLS.feel, layout.tableHeaderY)
-            ctx.fillText(utmb ? "降雨mm" : "降水%", COLS.precip, layout.tableHeaderY)
-            ctx.fillText(utmb ? "阵风m/s" : "风速m/s", COLS.wind, layout.tableHeaderY)
+            ctx.fillText("降雨mm/h", COLS.precip, layout.tableHeaderY)
+            ctx.fillText("风速m/s", COLS.wind, layout.tableHeaderY)
             ctx.fillText("里程km", COLS.km, layout.tableHeaderY)
             ctx.fillText("海拔m", COLS.alt, layout.tableHeaderY)
 
@@ -1973,14 +1974,17 @@
                 ctx.fillText(fmt(s.temperature, 1), COLS.temp, y)
                 ctx.fillStyle = s.apparentTemperature <= 5 ? T.cold : INK
                 ctx.fillText(fmt(s.apparentTemperature, 1), COLS.feel, y)
+                ctx.fillText(fmt(s.precip, 1), COLS.precip, y)
                 if (utmb) {
-                    ctx.fillStyle = s.precip > 2 ? ACCENT : INK
-                    ctx.fillText(fmt(s.precip, 1), COLS.precip, y)
-                    ctx.fillStyle = s.gustMax > 13.9 ? ACCENT : INK
-                    ctx.fillText(fmt(s.gustMed, 0), COLS.wind, y)
+                    ctx.fillText(fmt(s.windSpeed, 0), COLS.wind, y)
+                    ctx.fillStyle = DIM
+                    ctx.font = "16px " + SANS
+                    ctx.textAlign = "left"
+                    ctx.fillText(`${s.rainCount}/${s.consensus.n} 模型有雨`, COLS.wind + 14, y)
+                    ctx.textAlign = "right"
+                    ctx.fillStyle = INK
+                    ctx.font = "22px " + MONO
                 } else {
-                    ctx.fillStyle = s.precipProb >= 60 ? ACCENT : INK
-                    ctx.fillText(fmt(s.precipProb, 0), COLS.precip, y)
                     ctx.fillStyle = s.windSpeed >= 10 ? ACCENT : INK
                     ctx.fillText(fmt(s.windSpeed, 1), COLS.wind, y)
                 }
@@ -2016,6 +2020,7 @@
                     temperature: fmt(s.temperature, 1),
                     apparentTemperature: fmt(s.apparentTemperature, 1),
                     precipProb: fmt(s.precipProb, 0),
+                    precip: fmt(s.precip, 1),
                     windSpeed: fmt(s.windSpeed, 1),
                     windDir: s.windDir,
                     distanceKm: fmt(s.distanceKm, 2),
@@ -2026,6 +2031,7 @@
                     const cons = s.consensus || {}
                     display.tempRange = `${fmt(cons.tempMin, 1)}~${fmt(cons.tempMax, 1)}`
                     display.rainModels = `${cons.rainCount}/${cons.n}`
+                    display.rainRatio = cons.n ? `${fmt(s.precip, 1)}mm · ${cons.rainCount}/${cons.n} 模型` : "-"
                     display.gust = `${fmt(s.gustMed, 0)}/${fmt(s.gustMax, 0)}`
                     display.consensus = `${cons.level || "—"}${s.riskLabel ? " · " + s.riskLabel : ""}`
                     display.modelCount = cons.n || 0
@@ -2258,6 +2264,7 @@
                 sample.windDeg = data.hourly.winddirection_10m[idx]
                 sample.windDir = windDirectionText(sample.windDeg)
                 sample.precipProb = data.hourly.precipitation_probability[idx]
+                sample.precip = data.hourly.precipitation ? (data.hourly.precipitation[idx] ?? null) : null
             }
         }
 
@@ -2346,6 +2353,7 @@
             const utmb = displaySamples[0] && displaySamples[0].utmb
             const rows = displaySamples.map((s, i) => {
                 const precipNum = Number(s.precipProb)
+                const rainNum = Number(s.precip)
                 const windNum = Number(s.windSpeed)
                 const appTempNum = Number(s.apparentTemperature)
                 const tempNum = Number(s.temperature)
@@ -2359,7 +2367,7 @@
                     <tr class="${i === selectedIndex ? "sel" : ""}" data-i="${i}">
                         ${cells}
                         <td class="mono">${s.tempRange}</td>
-                        <td class="mono">${s.rainModels}</td>
+                        <td class="mono">${s.rainRatio}</td>
                         <td class="mono ${Number.isFinite(windNum) && windNum >= 10 ? "warn" : ""}">${s.windSpeed}</td>
                         <td class="mono">${s.gust}</td>
                         <td>${s.windDir}</td>
@@ -2373,6 +2381,7 @@
                     <tr class="${i === selectedIndex ? "sel" : ""}" data-i="${i}">
                         ${cells}
                         <td class="mono ${Number.isFinite(precipNum) && precipNum >= 60 ? "warn" : ""}">${s.precipProb}</td>
+                        <td class="mono ${Number.isFinite(rainNum) && rainNum >= 2 ? "warn" : ""}">${s.precip}</td>
                         <td class="mono ${Number.isFinite(windNum) && windNum >= 10 ? "warn" : ""}">${s.windSpeed}</td>
                         <td>${s.windDir}</td>
                         <td class="mono">${s.distanceKm}</td>
@@ -2387,7 +2396,7 @@
                             <th>气温 (°C)</th>
                             <th>体感温度 (°C)</th>
                             <th>范围 (°C)</th>
-                            <th>降雨 (模型)</th>
+                            <th>降雨mm · 有雨模型</th>
                             <th>风速 (m/s)</th>
                             <th>阵风 (中/大 m/s)</th>
                             <th>风向</th>
@@ -2401,6 +2410,7 @@
                             <th>气温 (°C)</th>
                             <th>体感温度 (°C)</th>
                             <th>降水概率 (%)</th>
+                            <th>降雨 (mm)</th>
                             <th>风速 (m/s)</th>
                             <th>风向</th>
                             <th>沿线里程 (km)</th>
@@ -2433,7 +2443,7 @@
             dWeather.textContent = s.weather
             dTemp.textContent = fmt(s.temperature, 1) + "°C"
             dFeel.textContent = fmt(s.apparentTemperature, 1) + "°C"
-            dPrecip.textContent = fmt(s.precipProb, 0) + "%"
+            dPrecip.textContent = fmt(s.precipProb, 0) + "%" + (s.precip != null && Number.isFinite(s.precip) ? " · " + fmt(s.precip, 1) + "mm" : "")
             dWind.textContent = fmt(s.windSpeed, 1) + "m/s"
             dWindDir.textContent = s.windDir
             dKm.textContent = fmt(s.distanceKm, 2) + "km"
@@ -2505,7 +2515,7 @@
             let header
             let rows
             if (utmb) {
-                header = ["时间", "天气", "气温(°C,中位)", "范围(°C)", "体感(°C)", "降雨(模型)", "风速(m/s)", "阵风(中/大 m/s)", "风向", "沿线里程(km)", "海拔(m)", "共识·风险"]
+                header = ["时间", "天气", "气温(°C,中位)", "范围(°C)", "体感(°C)", "降雨mm/h(中位)", "有雨模型", "风速(m/s)", "阵风(中/大 m/s)", "风向", "沿线里程(km)", "海拔(m)", "共识·风险"]
                 rows = lastSamples.map(item => {
                     const cons = item.consensus || {}
                     return [
@@ -2514,6 +2524,7 @@
                         fmt(item.temperature, 1),
                         `${fmt(cons.tempMin, 1)}~${fmt(cons.tempMax, 1)}`,
                         fmt(item.apparentTemperature, 1),
+                        fmt(item.precip, 1),
                         `${cons.rainCount}/${cons.n}`,
                         fmt(item.windSpeed, 1),
                         `${fmt(item.gustMed, 0)}/${fmt(item.gustMax, 0)}`,
@@ -2524,13 +2535,14 @@
                     ]
                 })
             } else {
-                header = ["时间", "天气", "气温(°C)", "体感(°C)", "降水概率(%)", "风速(m/s)", "风向", "沿线里程(km)", "海拔(m)"]
+                header = ["时间", "天气", "气温(°C)", "体感(°C)", "降水概率(%)", "降雨(mm/h)", "风速(m/s)", "风向", "沿线里程(km)", "海拔(m)"]
                 rows = lastSamples.map(item => [
                     item.fullLabel,
                     item.weather,
                     fmt(item.temperature, 1),
                     fmt(item.apparentTemperature, 1),
                     fmt(item.precipProb, 0),
+                    fmt(item.precip, 1),
                     fmt(item.windSpeed, 1),
                     item.windDir,
                     fmt(item.distanceKm, 2),
@@ -2736,6 +2748,7 @@
                     ws: s.windSpeed,
                     wd: s.windDeg,
                     p: s.precipProb,
+                    pmm: s.precip,
                     u: s.utmb ? {
                         min: s.consensus.tempMin,
                         max: s.consensus.tempMax,
@@ -2800,6 +2813,7 @@
                     windDeg: s.wd,
                     windDir: windDirectionText(s.wd),
                     precipProb: s.p,
+                    precip: s.pmm != null ? s.pmm : null,
                     emoji: weatherEmoji(s.c)
                 }
                 if (s.u) {
