@@ -100,6 +100,30 @@
             transform: scale(1.01);
         }
 
+        .upload-area.disabled {
+            cursor: not-allowed;
+            opacity: 0.55;
+            border-color: #d9d9d9;
+        }
+
+        .upload-area.disabled:hover {
+            background: #ffffff;
+            border-color: #d9d9d9;
+            transform: none;
+        }
+
+        .seg-item:disabled,
+        .dur-chip:disabled {
+            cursor: not-allowed;
+            opacity: 0.6;
+        }
+
+        input:disabled {
+            background: #f5f5f5;
+            color: #8a8a8a;
+            cursor: not-allowed;
+        }
+
         .form-grid {
             display: grid;
             grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
@@ -2638,10 +2662,14 @@
             }
         }
 
-        uploadArea.addEventListener("click", () => fileInput.click())
+        uploadArea.addEventListener("click", () => {
+            if (isSharedData) return
+            fileInput.click()
+        })
 
         uploadArea.addEventListener("dragover", event => {
             event.preventDefault()
+            if (isSharedData) return
             uploadArea.classList.add("dragover")
         })
 
@@ -2652,6 +2680,7 @@
         uploadArea.addEventListener("drop", event => {
             event.preventDefault()
             uploadArea.classList.remove("dragover")
+            if (isSharedData) return
             if (event.dataTransfer.files.length > 0) {
                 fileInput.files = event.dataTransfer.files
                 handleFile(fileInput.files[0])
@@ -2659,10 +2688,34 @@
         })
 
         fileInput.addEventListener("change", () => {
+            if (isSharedData) return
             if (fileInput.files.length > 0) {
                 handleFile(fileInput.files[0])
             }
         })
+
+        function applySharedLock() {
+            uploadArea.classList.add("disabled")
+            fileInput.disabled = true
+            startTimeInput.disabled = true
+            endTimeInput.disabled = true
+            durationHoursInput.disabled = true
+            modeDurationBtn.disabled = true
+            modeTimeBtn.disabled = true
+            durChips.forEach(chip => { chip.disabled = true })
+            tzNote.textContent = "分享数据：轨迹与出发/完赛时间已锁定，仅可刷新天气数据"
+        }
+
+        function clearSharedLock() {
+            uploadArea.classList.remove("disabled")
+            fileInput.disabled = false
+            startTimeInput.disabled = false
+            endTimeInput.disabled = false
+            durationHoursInput.disabled = false
+            modeDurationBtn.disabled = false
+            modeTimeBtn.disabled = false
+            durChips.forEach(chip => { chip.disabled = false })
+        }
 
         function setMode(duration) {
             useDuration = duration
@@ -2840,11 +2893,26 @@
             if (data.end) {
                 lastRange.end = new Date(data.end)
             }
+            if (lastRange.start) {
+                const s = instantToCourseWall(lastRange.start.getTime(), offsetSec)
+                startTimeInput.value = s.date + "T" + s.time
+            }
+            if (lastRange.end) {
+                const e = instantToCourseWall(lastRange.end.getTime(), offsetSec)
+                endTimeInput.value = e.date + "T" + e.time
+            }
+            if (lastRange.start && lastRange.end && lastRange.end.getTime() > lastRange.start.getTime()) {
+                const hours = (lastRange.end.getTime() - lastRange.start.getTime()) / 3600000
+                durationHoursInput.value = String(Math.round(hours * 10) / 10)
+            }
+            setMode(true)
+            syncDurChips()
             finalizeSamples(lastSamples)
             titleInput.value = gpxFileName
             isSharedData = true
             generateBtn.disabled = false
             generateBtn.textContent = "刷新天气数据"
+            applySharedLock()
             setFileInfo(`已加载分享数据，共 ${lastSamples.length} 个采样点`)
             setStatus(`已加载分享数据，共 ${lastSamples.length} 个采样点`)
         }
@@ -2874,6 +2942,7 @@
                 }
                 gpxData = parsed
                 isSharedData = false
+                clearSharedLock()
                 lastSamples = []
                 displaySamples = []
                 riskItems = []
