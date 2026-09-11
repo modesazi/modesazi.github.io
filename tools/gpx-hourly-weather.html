@@ -462,7 +462,7 @@
                 <button id="generateBtn" class="btn" disabled>生成逐小时气象采样</button>
                 <div style="margin-top: 12px;">
                     <label style="display: flex; align-items: center; gap: 8px; cursor: pointer; margin-bottom: 4px;">
-                        <input type="checkbox" id="utmbMode" checked style="transform: translateY(1px); width: auto;">
+                        <input type="checkbox" id="utmbMode" autocomplete="off" style="transform: translateY(1px); width: auto;">
                         UTMB 模式 · 多模型共识
                     </label>
                     <div class="note">按距比赛时间自动选择 ECMWF IFS / ICON-CH1·CH2 / ICON-EU / AROME HD，展示各模型原始值与共识、分歧；远期自动降级为单模型趋势</div>
@@ -597,7 +597,7 @@
         let selectedIndex = -1
         let resizeTimer = null
         let exportTheme = "light"
-        let utmbMode = true
+        let utmbMode = false
 
         const MONO = "Menlo, Consolas, monospace"
         const SANS = '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif'
@@ -3047,6 +3047,8 @@
 
         startTimeInput.value = toLocalDatetimeValue(nextFullHour())
         durationHoursInput.value = "12"
+        utmbModeInput.checked = false
+        utmbMode = false
         setMode(true)
         syncDurChips()
         loadSharedData()
